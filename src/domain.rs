@@ -96,3 +96,32 @@ pub const EXPECTED_MEMORY_14: Memory = Memory {
     password_len: 0x0E,
     checkdigit5: [0xAC, 0xE9, 0x07, 0x33, 0x25],
 };
+
+// 14文字
+// yokai03.exe 65 94 0E AC E9 07 33 25
+pub const EXPECTED_MEMORY_14_2: Memory = Memory {
+    checkdigit2: [0x51, 0x62],
+    password_len: 0x0E,
+    checkdigit5: [0xFD, 0x39, 0x03, 0xCB, 0x26],
+};
+
+pub fn to_charcode_indices(password: &str) -> Vec<usize> {
+    let mut result = Vec::new();
+    for c in password.chars() {
+        let c = CODE2CHAR.iter().position(|&x| x == c).unwrap();
+        let i = CHAR_CODES.iter().position(|&x| x as usize == c).unwrap();
+        result.push(i);
+    }
+    result
+}
+
+#[test]
+fn contains_yasu() {
+    let yasu = to_charcode_indices("NO.1!");
+
+    CHAR_CODES.iter().for_each(|c| {
+        eprintln!("{:08b}", c);
+    });
+
+    dbg!(yasu);
+}

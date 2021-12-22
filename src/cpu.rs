@@ -139,6 +139,12 @@ pub fn forward_step(memory: &mut Memory, a: u8) {
     calc_checkdigit5(&mut cpu, memory);
 }
 
+pub fn forward_word(memory: &mut Memory, word: &Vec<usize>) {
+    word.iter()
+        .map(|&c| CHAR_CODES[c])
+        .for_each(|a| forward_step(memory, a));
+}
+
 pub fn satisfy(password: &Vec<usize>, expected_memory: &Memory) -> bool {
     let mut memory = Memory::new(password.len() as u8);
 
