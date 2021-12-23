@@ -134,6 +134,8 @@ pub fn dict_search(expected_memory: &Memory) {
         std::fs::create_dir_all("cache").unwrap();
         let mut hasher = DefaultHasher::new();
         dict.hash(&mut hasher);
+        OPT.prefix.hash(&mut hasher);
+        OPT.suffix.hash(&mut hasher);
         let hash = hasher.finish();
         let cache_path = format!("cache/pattern2_{}.bin", hash);
 
