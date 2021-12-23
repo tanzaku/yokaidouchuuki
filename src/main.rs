@@ -1,5 +1,5 @@
 use dict::dict_search;
-use domain::{EXPECTED_MEMORY_11, EXPECTED_MEMORY_14, EXPECTED_MEMORY_14_2, EXPECTED_MEMORY_8};
+use domain::EXPECTED_MEMORY_14;
 
 mod bitset;
 mod cpu;

@@ -1,15 +1,9 @@
-use std::collections::{HashSet, VecDeque};
-use std::io::Read;
-
 use once_cell::sync::Lazy;
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
-use crate::cpu::{forward_step, forward_word, satisfy, Memory};
+use crate::cpu::Memory;
 use crate::opt::OPT;
 
-use crate::domain::{
-    is_alpha, is_number, is_symbol, is_vowel, to_charcode_indices, CHAR_CODES, CODE2CHAR,
-};
+use crate::domain::{is_alpha, is_number, is_symbol, is_vowel};
 
 type Validator = fn(&Memory, &Vec<usize>, &Vec<usize>) -> bool;
 
@@ -68,20 +62,20 @@ fn validate_option(
 
 /// 日本語として自然な言葉かどうかを検証する
 fn validate_natural_japanese(
-    expected_memory: &Memory,
+    _expected_memory: &Memory,
     password: &Vec<usize>,
     append_word: &Vec<usize>,
 ) -> bool {
     fn non_vowel_before_symbol(password_last_char: usize, append_word_first_char: usize) -> bool {
-        return !is_vowel(password_last_char) && is_symbol(append_word_first_char);
+        !is_vowel(password_last_char) && is_symbol(append_word_first_char)
     }
 
     fn non_vowel_before_number(password_last_char: usize, append_word_first_char: usize) -> bool {
-        return !is_vowel(password_last_char) && is_number(append_word_first_char);
+        !is_vowel(password_last_char) && is_number(append_word_first_char)
     }
 
     fn consecutive_same_char(password_last_char: usize, append_word_first_char: usize) -> bool {
-        return password_last_char == append_word_first_char;
+        password_last_char == append_word_first_char
     }
 
     fn consecutive_vowel(password: &Vec<usize>, append_word: &Vec<usize>) -> bool {
@@ -107,7 +101,7 @@ fn validate_natural_japanese(
         let c0 = password[password.len() - 2];
         let c1 = password[password.len() - 1];
         let c2 = append_word[0];
-        return !is_vowel(c0) && !is_vowel(c1) && !is_vowel(c2);
+        !is_vowel(c0) && !is_vowel(c1) && !is_vowel(c2)
     }
 
     if password.is_empty() {
@@ -149,7 +143,7 @@ fn validate_natural_japanese(
 
 // 5桁以上の数値はNG
 fn validate_suffix_consecutive_digits_length(
-    expected_memory: &Memory,
+    _expected_memory: &Memory,
     password: &Vec<usize>,
     append_word: &Vec<usize>,
 ) -> bool {
@@ -166,7 +160,7 @@ fn validate_suffix_consecutive_digits_length(
 
 // 記号の連続はNG
 fn validate_consecutive_symbols(
-    expected_memory: &Memory,
+    _expected_memory: &Memory,
     password: &Vec<usize>,
     append_word: &Vec<usize>,
 ) -> bool {
@@ -180,7 +174,7 @@ fn validate_consecutive_symbols(
 
 // 記号始まりはNG
 fn validate_first_char_is_symbol(
-    expected_memory: &Memory,
+    _expected_memory: &Memory,
     password: &Vec<usize>,
     append_word: &Vec<usize>,
 ) -> bool {

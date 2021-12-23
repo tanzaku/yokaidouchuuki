@@ -1,16 +1,14 @@
 use std::collections::hash_map::DefaultHasher;
-use std::collections::{HashSet, VecDeque};
+use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
 use std::io::Read;
 
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use crate::bitset::BitSet256;
-use crate::cpu::{forward_step, forward_word, satisfy, Memory};
+use crate::cpu::{forward_word, Memory};
 
-use crate::domain::{
-    is_alpha, is_number, is_symbol, is_vowel, to_charcode_indices, to_string, CHAR_CODES, CODE2CHAR,
-};
+use crate::domain::{to_string, CHAR_CODES, CODE2CHAR};
 use crate::opt::OPT;
 use crate::pruning::{is_valid_password, satisfy_option_constraint};
 
@@ -121,7 +119,7 @@ pub fn dict_search(expected_memory: &Memory) {
         let cache_path = format!("cache/pattern2_{}.bin", hash);
 
         if !OPT.ignore_cache {
-            if let Some(mut f) = std::fs::File::open(&cache_path).ok() {
+            if let Ok(mut f) = std::fs::File::open(&cache_path) {
                 let mut pattern = Vec::new();
                 f.read_to_end(&mut pattern).unwrap();
                 return bincode::deserialize(&pattern[..]).unwrap();
@@ -215,7 +213,7 @@ pub fn dict_search(expected_memory: &Memory) {
                     .collect();
 
                 std::fs::write(&cache_path, bincode::serialize(&dp).unwrap()).unwrap();
-                eprintln!("");
+                eprintln!();
                 break dp;
             }
         }
@@ -286,7 +284,7 @@ pub fn dict_search(expected_memory: &Memory) {
 
         if len == expected_memory.len() {
             if memory == expected_memory {
-                println!("find: {:?}, {}", &password, to_string(&password));
+                println!("find: {:?}, {}", &password, to_string(password));
             }
 
             return;
@@ -296,9 +294,9 @@ pub fn dict_search(expected_memory: &Memory) {
             let mut password = password.clone();
             if let Some(memory) = next(word, expected_memory, memory, &mut password) {
                 dfs_dict(
-                    &dict,
-                    &pattern1,
-                    &pattern2,
+                    dict,
+                    pattern1,
+                    pattern2,
                     expected_memory,
                     &memory,
                     &password,
@@ -315,7 +313,7 @@ pub fn dict_search(expected_memory: &Memory) {
         &dict,
         &pattern1,
         &pattern2,
-        &expected_memory,
+        expected_memory,
         &memory,
         &mut password,
     );

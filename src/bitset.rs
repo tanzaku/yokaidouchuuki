@@ -26,7 +26,7 @@ impl BitSet256 {
     }
 
     pub fn mut_rot_left(&mut self, i: usize) {
-        let x = self.bit.clone();
+        let x = self.bit;
 
         let offset = i / 64;
         let rem = i % 64;
@@ -43,7 +43,7 @@ impl BitSet256 {
     }
 
     pub fn mut_rot_right(&mut self, i: usize) {
-        let x = self.bit.clone();
+        let x = self.bit;
 
         let offset = i / 64;
         let rem = i % 64;
