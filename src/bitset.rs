@@ -61,6 +61,7 @@ impl BitSet256 {
         }
     }
 
+    #[allow(clippy::needless_range_loop)]
     pub fn to_vec(&self) -> Vec<bool> {
         let mut val = vec![false; 256];
         for i in 0..256 {

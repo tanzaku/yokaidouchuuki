@@ -308,7 +308,7 @@ pub fn dict_search(expected_memory: &Memory) {
     eprintln!("start search");
 
     let memory = Memory::new(expected_memory.len() as u8);
-    let mut password = Vec::new();
+    let password = Vec::new();
     dfs_dict(
         &dict,
         &pattern1,

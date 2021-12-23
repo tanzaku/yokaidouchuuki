@@ -139,6 +139,7 @@ pub fn forward_word(memory: &mut Memory, word: &[usize]) {
         .for_each(|a| forward_step(memory, a));
 }
 
+#[allow(dead_code)]
 pub fn satisfy(password: &[usize], expected_memory: &Memory) -> bool {
     let mut memory = Memory::new(password.len() as u8);
 
