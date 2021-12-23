@@ -14,13 +14,16 @@ use crate::domain::{
 type Validator = fn(&Memory, &Vec<usize>, &Vec<usize>) -> bool;
 
 const VALIDATORS: Lazy<Vec<Validator>> = Lazy::new(|| {
-    vec![
+    let mut validators: Vec<Validator> = vec![
         validate_option,
         validate_first_char_is_symbol,
         validate_consecutive_symbols,
         validate_suffix_consecutive_digits_length,
-        validate_natural_japanese,
-    ]
+    ];
+    if !OPT.disable_japanese_pruning {
+        validators.push(validate_natural_japanese);
+    }
+    validators
 });
 
 // オプションによるvalidation

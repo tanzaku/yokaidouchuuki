@@ -12,6 +12,9 @@ pub struct Opt {
     pub suffix: Option<String>,
 
     #[structopt(long)]
+    pub disable_japanese_pruning: bool,
+
+    #[structopt(long)]
     pub verbose: bool,
 
     #[structopt(long)]
@@ -25,6 +28,8 @@ pub struct OptInternal {
 
     pub suffix: Option<Vec<usize>>,
 
+    pub disable_japanese_pruning: bool,
+
     pub verbose: bool,
 
     pub ignore_cache: bool,
@@ -36,6 +41,7 @@ pub static OPT: Lazy<OptInternal> = Lazy::new(|| {
         prefix: opt.prefix.as_ref().map(|s| to_charcode_indices(s)),
         suffix: opt.suffix.as_ref().map(|s| to_charcode_indices(s)),
         verbose: opt.verbose,
+        disable_japanese_pruning: opt.disable_japanese_pruning,
         ignore_cache: opt.ignore_cache,
     }
 });
