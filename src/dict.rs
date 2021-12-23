@@ -11,7 +11,7 @@ use crate::domain::{
     is_alpha, is_number, is_symbol, is_vowel, to_charcode_indices, to_string, CHAR_CODES, CODE2CHAR,
 };
 use crate::opt::OPT;
-use crate::pruning::is_valid_password;
+use crate::pruning::{is_valid_password, satisfy_option_constraint};
 
 #[derive(Hash)]
 struct Dict {
@@ -45,26 +45,6 @@ impl Dict {
     }
 }
 
-fn satisfy_constraint(expected_memory: &Memory, index: usize, word: &Vec<usize>) -> bool {
-    if let Some(prefix) = &OPT.prefix {
-        if index < prefix.len() {
-            let n = (prefix.len() - index).min(word.len());
-            return prefix[index..index + n] == word[0..n];
-        }
-    }
-
-    if let Some(suffix) = &OPT.suffix {
-        let i = index.max(expected_memory.len() - suffix.len());
-        let j = index + word.len();
-        if i < j {
-            let o = expected_memory.len() - suffix.len();
-            return suffix[i - o..j - o] == word[i - index..];
-        }
-    }
-
-    true
-}
-
 pub fn dict_search(expected_memory: &Memory) {
     let dict = Dict::new();
 
@@ -94,7 +74,7 @@ pub fn dict_search(expected_memory: &Memory) {
                             }
 
                             let len = len - word.len();
-                            if !satisfy_constraint(expected_memory, len, word) {
+                            if !satisfy_option_constraint(expected_memory, len, word) {
                                 continue;
                             }
 
@@ -180,7 +160,7 @@ pub fn dict_search(expected_memory: &Memory) {
                                 continue;
                             }
 
-                            if !satisfy_constraint(expected_memory, len, word) {
+                            if !satisfy_option_constraint(expected_memory, len, word) {
                                 continue;
                             }
 
@@ -236,7 +216,7 @@ pub fn dict_search(expected_memory: &Memory) {
             return None;
         }
 
-        if !is_valid_password(password, append_word) {
+        if !is_valid_password(expected_memory, password, append_word) {
             return None;
         }
 

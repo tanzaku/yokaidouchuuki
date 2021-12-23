@@ -5,15 +5,17 @@ use once_cell::sync::Lazy;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use crate::cpu::{forward_step, forward_word, satisfy, Memory};
+use crate::opt::OPT;
 
 use crate::domain::{
     is_alpha, is_number, is_symbol, is_vowel, to_charcode_indices, CHAR_CODES, CODE2CHAR,
 };
 
-type Validator = fn(&Vec<usize>, &Vec<usize>) -> bool;
+type Validator = fn(&Memory, &Vec<usize>, &Vec<usize>) -> bool;
 
 const VALIDATORS: Lazy<Vec<Validator>> = Lazy::new(|| {
     vec![
+        validate_option,
         validate_first_char_is_symbol,
         validate_consecutive_symbols,
         validate_suffix_consecutive_digits_length,
@@ -21,8 +23,50 @@ const VALIDATORS: Lazy<Vec<Validator>> = Lazy::new(|| {
     ]
 });
 
+// オプションによるvalidation
+pub fn satisfy_option_constraint(
+    expected_memory: &Memory,
+    index: usize,
+    word: &Vec<usize>,
+) -> bool {
+    if let Some(prefix) = &OPT.prefix {
+        if index < prefix.len() {
+            let n = (prefix.len() - index).min(word.len());
+            if prefix[index..index + n] != word[0..n] {
+                return false;
+            }
+        }
+    }
+
+    if let Some(suffix) = &OPT.suffix {
+        let i = index.max(expected_memory.len() - suffix.len());
+        let j = index + word.len();
+        if i < j {
+            let o = expected_memory.len() - suffix.len();
+            if suffix[i - o..j - o] != word[i - index..] {
+                return false;
+            }
+        }
+    }
+
+    true
+}
+
+// オプションによるvalidation
+fn validate_option(
+    expected_memory: &Memory,
+    password: &Vec<usize>,
+    append_word: &Vec<usize>,
+) -> bool {
+    satisfy_option_constraint(expected_memory, password.len(), append_word)
+}
+
 /// 日本語として自然な言葉かどうかを検証する
-fn validate_natural_japanese(password: &Vec<usize>, append_word: &Vec<usize>) -> bool {
+fn validate_natural_japanese(
+    expected_memory: &Memory,
+    password: &Vec<usize>,
+    append_word: &Vec<usize>,
+) -> bool {
     fn non_vowel_before_symbol(password_last_char: usize, append_word_first_char: usize) -> bool {
         return !is_vowel(password_last_char) && is_symbol(append_word_first_char);
     }
@@ -99,6 +143,7 @@ fn validate_natural_japanese(password: &Vec<usize>, append_word: &Vec<usize>) ->
 
 // 5桁以上の数値はNG
 fn validate_suffix_consecutive_digits_length(
+    expected_memory: &Memory,
     password: &Vec<usize>,
     append_word: &Vec<usize>,
 ) -> bool {
@@ -114,7 +159,11 @@ fn validate_suffix_consecutive_digits_length(
 }
 
 // 記号の連続はNG
-fn validate_consecutive_symbols(password: &Vec<usize>, append_word: &Vec<usize>) -> bool {
+fn validate_consecutive_symbols(
+    expected_memory: &Memory,
+    password: &Vec<usize>,
+    append_word: &Vec<usize>,
+) -> bool {
     if let Some(&c1) = password.last() {
         let c2 = append_word[0];
         return !is_symbol(c1) || !is_symbol(c2);
@@ -124,7 +173,11 @@ fn validate_consecutive_symbols(password: &Vec<usize>, append_word: &Vec<usize>)
 }
 
 // 記号始まりはNG
-fn validate_first_char_is_symbol(password: &Vec<usize>, append_word: &Vec<usize>) -> bool {
+fn validate_first_char_is_symbol(
+    expected_memory: &Memory,
+    password: &Vec<usize>,
+    append_word: &Vec<usize>,
+) -> bool {
     if !password.is_empty() {
         return true;
     }
@@ -132,8 +185,12 @@ fn validate_first_char_is_symbol(password: &Vec<usize>, append_word: &Vec<usize>
     !is_symbol(append_word[0])
 }
 
-pub fn is_valid_password(password: &Vec<usize>, append_word: &Vec<usize>) -> bool {
+pub fn is_valid_password(
+    expected_memory: &Memory,
+    password: &Vec<usize>,
+    append_word: &Vec<usize>,
+) -> bool {
     VALIDATORS
         .iter()
-        .all(|validator| validator(password, append_word))
+        .all(|validator| validator(expected_memory, password, append_word))
 }
