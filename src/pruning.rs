@@ -7,7 +7,7 @@ use crate::domain::{is_alpha, is_number, is_symbol, is_vowel};
 
 type Validator = fn(&Memory, &[usize], &[usize]) -> bool;
 
-const VALIDATORS: Lazy<Vec<Validator>> = Lazy::new(|| {
+static VALIDATORS: Lazy<Vec<Validator>> = Lazy::new(|| {
     let mut validators: Vec<Validator> = vec![
         validate_option,
         validate_first_char_is_symbol,
@@ -19,8 +19,6 @@ const VALIDATORS: Lazy<Vec<Validator>> = Lazy::new(|| {
     }
     validators
 });
-
-static STATIC_VALIDATORS: Lazy<Vec<Validator>> = VALIDATORS;
 
 // オプションによるvalidation
 pub fn satisfy_option_constraint(expected_memory: &Memory, index: usize, word: &[usize]) -> bool {
@@ -182,7 +180,7 @@ pub fn is_valid_password(
     password: &[usize],
     append_word: &[usize],
 ) -> bool {
-    STATIC_VALIDATORS
+    VALIDATORS
         .iter()
         .all(|validator| validator(expected_memory, password, append_word))
 }

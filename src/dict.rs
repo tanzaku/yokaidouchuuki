@@ -251,11 +251,11 @@ pub fn dict_search(expected_memory: &Memory) {
 
     fn dfs_dict(
         dict: &Dict,
-        pattern1: &Vec<Vec<Vec<Vec<bool>>>>,
-        pattern2: &Vec<Vec<Vec<Vec<bool>>>>,
+        pattern1: &[Vec<Vec<Vec<bool>>>],
+        pattern2: &[Vec<Vec<Vec<bool>>>],
         expected_memory: &Memory,
         memory: &Memory,
-        password: &Vec<usize>,
+        password: &[usize],
     ) {
         let len = password.len();
         let bit = memory.bit();
@@ -291,7 +291,7 @@ pub fn dict_search(expected_memory: &Memory) {
         }
 
         dict.words.par_iter().for_each(|word| {
-            let mut password = password.clone();
+            let mut password = password.to_vec();
             if let Some(memory) = next(word, expected_memory, memory, &mut password) {
                 dfs_dict(
                     dict,
@@ -315,6 +315,6 @@ pub fn dict_search(expected_memory: &Memory) {
         &pattern2,
         expected_memory,
         &memory,
-        &mut password,
+        &password,
     );
 }

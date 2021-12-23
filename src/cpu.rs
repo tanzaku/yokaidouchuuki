@@ -1,6 +1,6 @@
 use crate::domain::CHAR_CODES;
 
-struct CPU {
+struct Cpu {
     reg: Register,
 }
 
@@ -58,7 +58,7 @@ struct Register {
     c: u8,
 }
 
-impl CPU {
+impl Cpu {
     fn set_carry(&mut self, c: u8) {
         self.reg.c = c;
     }
@@ -85,7 +85,7 @@ impl CPU {
     }
 }
 
-fn calc_checkdigit1(cpu: &mut CPU, memory: &mut Memory) {
+fn calc_checkdigit1(cpu: &mut Cpu, memory: &mut Memory) {
     for i in (0..8).rev() {
         cpu.set_carry(cpu.reg.a >> i & 1);
 
@@ -98,7 +98,7 @@ fn calc_checkdigit1(cpu: &mut CPU, memory: &mut Memory) {
     }
 }
 
-fn calc_checkdigit2(cpu: &mut CPU, memory: &mut Memory) {
+fn calc_checkdigit2(cpu: &mut Cpu, memory: &mut Memory) {
     cpu.set_carry(if memory.checkdigit2[0] >= 0xE5 { 1 } else { 0 });
 
     // だいたい入力の和。memory.checkdigit2[0] >= 0xE5 の分だけずれる
@@ -106,23 +106,23 @@ fn calc_checkdigit2(cpu: &mut CPU, memory: &mut Memory) {
     memory.checkdigit5[1] = cpu.adc(memory.checkdigit5[1], memory.checkdigit2[1]);
 }
 
-fn calc_checkdigit3(cpu: &mut CPU, memory: &mut Memory) {
+fn calc_checkdigit3(cpu: &mut Cpu, memory: &mut Memory) {
     memory.checkdigit5[2] ^= cpu.reg.a;
 }
 
-fn calc_checkdigit4(cpu: &mut CPU, memory: &mut Memory) {
+fn calc_checkdigit4(cpu: &mut Cpu, memory: &mut Memory) {
     let v = cpu.ror(memory.checkdigit5[3]);
     memory.checkdigit5[3] = cpu.adc(v, cpu.reg.a);
 }
 
-fn calc_checkdigit5(cpu: &mut CPU, memory: &mut Memory) {
+fn calc_checkdigit5(cpu: &mut Cpu, memory: &mut Memory) {
     // https://www.pagetable.com/c64ref/6502/?tab=2
     // PLA（pop）でもZフラグが変わることに注意
     memory.checkdigit5[4] += cpu.get_carry() + (cpu.reg.a.count_ones() as u8);
 }
 
 pub fn forward_step(memory: &mut Memory, a: u8) {
-    let mut cpu = CPU {
+    let mut cpu = Cpu {
         reg: Register { a, c: 0 },
     };
 

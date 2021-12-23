@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use once_cell::sync::Lazy;
 
 use crate::cpu::Memory;
@@ -115,71 +117,46 @@ pub fn to_charcode_indices(password: &str) -> Vec<usize> {
 }
 
 pub fn is_number(index: usize) -> bool {
-    match index {
-        29 => true, // '0'
-        4 => true,  // '1'
-        10 => true, // '2'
-        16 => true, // '3'
-        22 => true, // '4'
-        28 => true, // '5'
-        5 => true,  // '6'
-        11 => true, // '7'
-        17 => true, // '8'
-        23 => true, // '9'
-        _ => false, //
-    }
+    matches!(index, 29 | 4 | 10 | 16 | 22 | 28 | 5 | 11 | 17 | 23)
 }
 
 pub fn is_symbol(index: usize) -> bool {
-    match index {
-        39 => true, // '-'
-        33 => true, // '.'
-        35 => true, // '!'
-        _ => false, //
-    }
+    matches!(index, 39 | 33 | 35)
 }
 
 pub fn is_vowel(index: usize) -> bool {
-    match index {
-        0 => true,
-        7 => true,
-        38 => true,
-        24 => true,
-        2 => true,
-        _ => false, //
-    }
+    matches!(index, 0 | 7 | 38 | 24 | 2)
 }
 
 pub fn is_alpha(index: usize) -> bool {
-    match index {
-        0 => true,
-        6 => true,
-        12 => true,
-        18 => true,
-        24 => true,
-        30 => true,
-        36 => true,
-        1 => true,
-        7 => true,
-        13 => true,
-        19 => true,
-        25 => true,
-        31 => true,
-        37 => true,
-        2 => true,
-        8 => true,
-        14 => true,
-        20 => true,
-        26 => true,
-        32 => true,
-        38 => true,
-        3 => true,
-        9 => true,
-        15 => true,
-        21 => true,
-        27 => true,
-        _ => false, //
-    }
+    matches!(
+        index,
+        0 | 6
+            | 12
+            | 18
+            | 24
+            | 30
+            | 36
+            | 1
+            | 7
+            | 13
+            | 19
+            | 25
+            | 31
+            | 37
+            | 2
+            | 8
+            | 14
+            | 20
+            | 26
+            | 32
+            | 38
+            | 3
+            | 9
+            | 15
+            | 21
+            | 27
+    )
 }
 
 pub fn to_string(password: &[usize]) -> String {

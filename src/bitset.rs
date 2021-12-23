@@ -25,6 +25,7 @@ impl BitSet256 {
         b
     }
 
+    #[allow(clippy::needless_range_loop)]
     pub fn mut_rot_left(&mut self, i: usize) {
         let x = self.bit;
 
@@ -42,6 +43,7 @@ impl BitSet256 {
         }
     }
 
+    #[allow(clippy::needless_range_loop)]
     pub fn mut_rot_right(&mut self, i: usize) {
         let x = self.bit;
 
