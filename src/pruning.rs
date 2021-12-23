@@ -5,7 +5,7 @@ use crate::opt::OPT;
 
 use crate::domain::{is_alpha, is_number, is_symbol, is_vowel};
 
-type Validator = fn(&Memory, &Vec<usize>, &Vec<usize>) -> bool;
+type Validator = fn(&Memory, &[usize], &[usize]) -> bool;
 
 const VALIDATORS: Lazy<Vec<Validator>> = Lazy::new(|| {
     let mut validators: Vec<Validator> = vec![
@@ -23,11 +23,7 @@ const VALIDATORS: Lazy<Vec<Validator>> = Lazy::new(|| {
 static STATIC_VALIDATORS: Lazy<Vec<Validator>> = VALIDATORS;
 
 // オプションによるvalidation
-pub fn satisfy_option_constraint(
-    expected_memory: &Memory,
-    index: usize,
-    word: &Vec<usize>,
-) -> bool {
+pub fn satisfy_option_constraint(expected_memory: &Memory, index: usize, word: &[usize]) -> bool {
     if let Some(prefix) = &OPT.prefix {
         if index < prefix.len() {
             let n = (prefix.len() - index).min(word.len());
@@ -52,19 +48,15 @@ pub fn satisfy_option_constraint(
 }
 
 // オプションによるvalidation
-fn validate_option(
-    expected_memory: &Memory,
-    password: &Vec<usize>,
-    append_word: &Vec<usize>,
-) -> bool {
+fn validate_option(expected_memory: &Memory, password: &[usize], append_word: &[usize]) -> bool {
     satisfy_option_constraint(expected_memory, password.len(), append_word)
 }
 
 /// 日本語として自然な言葉かどうかを検証する
 fn validate_natural_japanese(
     _expected_memory: &Memory,
-    password: &Vec<usize>,
-    append_word: &Vec<usize>,
+    password: &[usize],
+    append_word: &[usize],
 ) -> bool {
     fn non_vowel_before_symbol(password_last_char: usize, append_word_first_char: usize) -> bool {
         !is_vowel(password_last_char) && is_symbol(append_word_first_char)
@@ -78,7 +70,7 @@ fn validate_natural_japanese(
         password_last_char == append_word_first_char
     }
 
-    fn consecutive_vowel(password: &Vec<usize>, append_word: &Vec<usize>) -> bool {
+    fn consecutive_vowel(password: &[usize], append_word: &[usize]) -> bool {
         if password.len() < 3 {
             return false;
         }
@@ -93,7 +85,7 @@ fn validate_natural_japanese(
     }
 
     // TODO これはオフったほうがいい？
-    fn consecutive_non_vowel(password: &Vec<usize>, append_word: &Vec<usize>) -> bool {
+    fn consecutive_non_vowel(password: &[usize], append_word: &[usize]) -> bool {
         if password.len() < 2 {
             return false;
         }
@@ -144,8 +136,8 @@ fn validate_natural_japanese(
 // 5桁以上の数値はNG
 fn validate_suffix_consecutive_digits_length(
     _expected_memory: &Memory,
-    password: &Vec<usize>,
-    append_word: &Vec<usize>,
+    password: &[usize],
+    append_word: &[usize],
 ) -> bool {
     if append_word.len() == 1 && is_number(append_word[0]) {
         let len = password.iter().rev().take_while(|&&c| is_number(c)).count() as usize;
@@ -161,8 +153,8 @@ fn validate_suffix_consecutive_digits_length(
 // 記号の連続はNG
 fn validate_consecutive_symbols(
     _expected_memory: &Memory,
-    password: &Vec<usize>,
-    append_word: &Vec<usize>,
+    password: &[usize],
+    append_word: &[usize],
 ) -> bool {
     if let Some(&c1) = password.last() {
         let c2 = append_word[0];
@@ -175,8 +167,8 @@ fn validate_consecutive_symbols(
 // 記号始まりはNG
 fn validate_first_char_is_symbol(
     _expected_memory: &Memory,
-    password: &Vec<usize>,
-    append_word: &Vec<usize>,
+    password: &[usize],
+    append_word: &[usize],
 ) -> bool {
     if !password.is_empty() {
         return true;
@@ -187,8 +179,8 @@ fn validate_first_char_is_symbol(
 
 pub fn is_valid_password(
     expected_memory: &Memory,
-    password: &Vec<usize>,
-    append_word: &Vec<usize>,
+    password: &[usize],
+    append_word: &[usize],
 ) -> bool {
     STATIC_VALIDATORS
         .iter()

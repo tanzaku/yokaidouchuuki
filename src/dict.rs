@@ -224,7 +224,7 @@ pub fn dict_search(expected_memory: &Memory) {
     let pattern2 = build_pattern2(&dict, expected_memory);
 
     fn next(
-        append_word: &Vec<usize>,
+        append_word: &[usize],
         expected_memory: &Memory,
         memory: &Memory,
         password: &mut Vec<usize>,

@@ -182,7 +182,7 @@ pub fn is_alpha(index: usize) -> bool {
     }
 }
 
-pub fn to_string(password: &Vec<usize>) -> String {
+pub fn to_string(password: &[usize]) -> String {
     password
         .iter()
         .map(|&p| CODE2CHAR[CHAR_CODES[p] as usize])
