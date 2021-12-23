@@ -26,6 +26,8 @@ const VALIDATORS: Lazy<Vec<Validator>> = Lazy::new(|| {
     validators
 });
 
+static STATIC_VALIDATORS: Lazy<Vec<Validator>> = VALIDATORS;
+
 // オプションによるvalidation
 pub fn satisfy_option_constraint(
     expected_memory: &Memory,
@@ -194,7 +196,7 @@ pub fn is_valid_password(
     password: &Vec<usize>,
     append_word: &Vec<usize>,
 ) -> bool {
-    VALIDATORS
+    STATIC_VALIDATORS
         .iter()
         .all(|validator| validator(expected_memory, password, append_word))
 }
