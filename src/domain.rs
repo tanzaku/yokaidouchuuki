@@ -74,7 +74,7 @@ pub const EXPECTED_MEMORY_KID: Memory = Memory {
     checkdigit5: [0x3A, 0xE9, 0x08, 0x23, 0x07],
 };
 
-// 8文字
+// 8文字 818-6104
 pub const EXPECTED_MEMORY_8: Memory = Memory {
     checkdigit2: [0xDC, 0xD9],
     password_len: 0x08,
@@ -97,8 +97,7 @@ pub const EXPECTED_MEMORY_14: Memory = Memory {
     checkdigit5: [0xAC, 0xE9, 0x07, 0x33, 0x25],
 };
 
-// 14文字
-// yokai03.exe 65 94 0E AC E9 07 33 25
+// 14文字(monitorのところにあるハッシュ値)
 pub const EXPECTED_MEMORY_14_2: Memory = Memory {
     checkdigit2: [0x51, 0x62],
     password_len: 0x0E,
@@ -115,13 +114,77 @@ pub fn to_charcode_indices(password: &str) -> Vec<usize> {
     result
 }
 
-#[test]
-fn contains_yasu() {
-    let yasu = to_charcode_indices("NO.1!");
+pub fn is_number(index: usize) -> bool {
+    match index {
+        29 => true, // '0'
+        4 => true,  // '1'
+        10 => true, // '2'
+        16 => true, // '3'
+        22 => true, // '4'
+        28 => true, // '5'
+        5 => true,  // '6'
+        11 => true, // '7'
+        17 => true, // '8'
+        23 => true, // '9'
+        _ => false, //
+    }
+}
 
-    CHAR_CODES.iter().for_each(|c| {
-        eprintln!("{:08b}", c);
-    });
+pub fn is_symbol(index: usize) -> bool {
+    match index {
+        39 => true, // '-'
+        33 => true, // '.'
+        35 => true, // '!'
+        _ => false, //
+    }
+}
 
-    dbg!(yasu);
+pub fn is_vowel(index: usize) -> bool {
+    match index {
+        0 => true,
+        7 => true,
+        38 => true,
+        24 => true,
+        2 => true,
+        _ => false, //
+    }
+}
+
+pub fn is_alpha(index: usize) -> bool {
+    match index {
+        0 => true,
+        6 => true,
+        12 => true,
+        18 => true,
+        24 => true,
+        30 => true,
+        36 => true,
+        1 => true,
+        7 => true,
+        13 => true,
+        19 => true,
+        25 => true,
+        31 => true,
+        37 => true,
+        2 => true,
+        8 => true,
+        14 => true,
+        20 => true,
+        26 => true,
+        32 => true,
+        38 => true,
+        3 => true,
+        9 => true,
+        15 => true,
+        21 => true,
+        27 => true,
+        _ => false, //
+    }
+}
+
+pub fn to_string(password: &Vec<usize>) -> String {
+    password
+        .iter()
+        .map(|&p| CODE2CHAR[CHAR_CODES[p] as usize])
+        .collect::<String>()
 }

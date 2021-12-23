@@ -116,12 +116,6 @@ fn calc_checkdigit4(cpu: &mut CPU, memory: &mut Memory) {
 }
 
 fn calc_checkdigit5(cpu: &mut CPU, memory: &mut Memory) {
-    // loop {
-    //     let c = (a >> 7) & 0x01;
-    //     rol(&mut a);
-    //     memory.checkdigit5[4] += c;
-    // }
-
     // https://www.pagetable.com/c64ref/6502/?tab=2
     // PLA（pop）でもZフラグが変わることに注意
     memory.checkdigit5[4] += cpu.get_carry() + (cpu.reg.a.count_ones() as u8);
