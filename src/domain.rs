@@ -81,7 +81,7 @@ pub const EXPECTED_MEMORY_8: Memory = Memory {
     checkdigit5: [0xA3, 0xE3, 0x17, 0x28, 0x15],
 };
 
-// 11文字
+// 11文字 HENTAIOSUGI
 // yokai03.exe 64 98 0B 15 91 18 B1 15
 pub const EXPECTED_MEMORY_11: Memory = Memory {
     checkdigit2: [0x64, 0x98],

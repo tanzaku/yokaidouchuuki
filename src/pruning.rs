@@ -93,6 +93,7 @@ fn validate_natural_japanese(
         is_vowel(c0) && is_vowel(c1) && is_vowel(c2) && is_vowel(c3)
     }
 
+    // TODO これはオフったほうがいい？
     fn consecutive_non_vowel(password: &Vec<usize>, append_word: &Vec<usize>) -> bool {
         if password.len() < 2 {
             return false;

@@ -5,6 +5,7 @@ use std::io::Read;
 
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
+use crate::bitset::BitSet256;
 use crate::cpu::{forward_step, forward_word, satisfy, Memory};
 
 use crate::domain::{
@@ -129,13 +130,13 @@ pub fn dict_search(expected_memory: &Memory) {
 
         let len = expected_memory.len();
 
-        let mut dp = vec![vec![vec![vec![false; 0x100]; 0x100]; 0x100]; len + 1];
+        let mut dp = vec![vec![vec![BitSet256::default(); 0x100]; 0x100]; len + 1];
 
         {
             let s0 = expected_memory.checkdigit2[0] as usize;
             let s1 = expected_memory.checkdigit2[1] as usize;
             let s2 = expected_memory.checkdigit5[0] as usize;
-            dp[len][s0][s1][s2] = true;
+            dp[len][s0][s1].flip(s2);
         }
 
         // by dict
@@ -143,13 +144,13 @@ pub fn dict_search(expected_memory: &Memory) {
             eprint!(".");
             let mut updated = false;
 
-            let mut visited = vec![vec![vec![vec![false; 0x100]; 0x100]; 0x100]; len + 1];
+            let mut visited = vec![vec![vec![BitSet256::default(); 0x100]; 0x100]; len + 1];
             {
                 let memory = Memory::new(expected_memory.len() as u8);
                 let s0 = memory.checkdigit2[0] as usize;
                 let s1 = memory.checkdigit2[1] as usize;
                 let s2 = memory.checkdigit5[0] as usize;
-                visited[0][s0][s1][s2] = true;
+                visited[0][s0][s1].flip(s2);
             }
 
             for len in 0..visited.len() {
@@ -175,26 +176,44 @@ pub fn dict_search(expected_memory: &Memory) {
                             let next_len = len + word.len();
                             let next_s0 = memory.checkdigit2[0] as usize;
                             let next_s1 = memory.checkdigit2[1] as usize;
+                            let offset = memory.checkdigit5[0] as usize;
 
                             // TODO visited, dpをbitsetにして高速化したい
-                            for s2 in 0..0x100 {
-                                if !visited[len][s0][s1][s2] {
-                                    continue;
-                                }
+                            let rotated = visited[len][s0][s1].rot_left(offset);
+                            visited[next_len][next_s0][next_s1] |= rotated;
 
-                                let next_s2 = (s2 + memory.checkdigit5[0] as usize) & 0xFF;
-                                visited[next_len][next_s0][next_s1][next_s2] = true;
+                            let rotated = dp[next_len][next_s0][next_s1].rot_right(offset);
+                            let prev = dp[len][s0][s1].clone();
+                            dp[len][s0][s1] |= &rotated & &visited[len][s0][s1];
+                            updated |= prev != dp[len][s0][s1];
 
-                                if !dp[len][s0][s1][s2] && dp[next_len][next_s0][next_s1][next_s2] {
-                                    dp[len][s0][s1][s2] = true;
-                                    updated = true;
-                                }
-                            }
+                            // for s2 in 0..0x100 {
+                            //     if !visited[len][s0][s1][s2] {
+                            //         continue;
+                            //     }
+
+                            //     let next_s2 = (s2 + memory.checkdigit5[0] as usize) & 0xFF;
+                            //     visited[next_len][next_s0][next_s1][next_s2] = true;
+
+                            //     if !dp[len][s0][s1][s2] && dp[next_len][next_s0][next_s1][next_s2] {
+                            //         dp[len][s0][s1][s2] = true;
+                            //         updated = true;
+                            //     }
+                            // }
                         }
                     }
                 }
             }
             if !updated {
+                let dp: Vec<_> = dp
+                    .into_iter()
+                    .map(|dp| {
+                        dp.into_iter()
+                            .map(|dp| dp.into_iter().map(|dp| dp.to_vec()).collect())
+                            .collect()
+                    })
+                    .collect();
+
                 std::fs::write(&cache_path, bincode::serialize(&dp).unwrap()).unwrap();
                 eprintln!("");
                 break dp;
