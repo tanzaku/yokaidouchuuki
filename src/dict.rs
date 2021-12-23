@@ -140,6 +140,7 @@ pub fn dict_search(expected_memory: &Memory) {
         }
 
         // by dict
+        // グラフを作って最外ループを無くしたいが、自分の環境だとメモリが足りないため断念
         loop {
             eprint!(".");
             let mut updated = false;
