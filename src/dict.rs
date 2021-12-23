@@ -179,7 +179,6 @@ pub fn dict_search(expected_memory: &Memory) {
                             let next_s1 = memory.checkdigit2[1] as usize;
                             let offset = memory.checkdigit5[0] as usize;
 
-                            // TODO visited, dpをbitsetにして高速化したい
                             let rotated = visited[len][s0][s1].rot_left(offset);
                             visited[next_len][next_s0][next_s1] |= rotated;
 
