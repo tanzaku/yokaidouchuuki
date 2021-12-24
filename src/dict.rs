@@ -1,10 +1,18 @@
+use std::collections::hash_map::DefaultHasher;
 use std::collections::HashSet;
+use std::hash::{Hash, Hasher};
 use std::io::Read;
 
-use crate::cpu::{satisfy, Memory};
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
-use crate::domain::{CHAR_CODES, CODE2CHAR};
+use crate::bitset::BitSet256;
+use crate::cpu::{forward_word, Memory};
 
+use crate::domain::{to_string, CHAR_CODES, CODE2CHAR};
+use crate::opt::OPT;
+use crate::pruning::{is_valid_password, satisfy_option_constraint};
+
+#[derive(Hash)]
 struct Dict {
     words: Vec<Vec<usize>>,
 }
@@ -19,7 +27,7 @@ impl Dict {
         let mut set = HashSet::new();
         let mut words = Vec::new();
         for s in s.split_whitespace() {
-            if !set.insert(s) {
+            if s.is_empty() || s.contains(';') || !set.insert(s) {
                 continue;
             }
             let mut v = Vec::new();
@@ -38,173 +46,275 @@ impl Dict {
 
 pub fn dict_search(expected_memory: &Memory) {
     let dict = Dict::new();
-    let bit = expected_memory.bit();
-    let len = expected_memory.len();
-    let sum = expected_memory.sum();
-    let xor = expected_memory.xor();
 
-    let mut pattern = vec![vec![vec![vec![false; 0x100]; 0x100]; bit + 1]; len + 1];
+    fn build_pattern1(dict: &Dict, expected_memory: &Memory) -> Vec<Vec<Vec<Vec<bool>>>> {
+        eprintln!("calc DP1");
 
-    eprintln!("calc DP");
-    pattern[0][0][0][0] = true;
+        let bit = expected_memory.bit();
+        let len = expected_memory.len();
+        let sum = expected_memory.sum();
+        let xor = expected_memory.xor();
 
-    // by dict
-    for len in 0..pattern.len() - 1 {
-        for bit in 0..pattern[len].len() {
-            for sum in 0..0x100 {
-                for xor in 0..0x100 {
-                    if pattern[len][bit][sum][xor] {
+        let mut pattern = vec![vec![vec![vec![false; 0x100]; 0x100]; bit + 1]; len + 1];
+
+        pattern[len][bit][sum][xor] = true;
+
+        for len in (0..pattern.len()).rev() {
+            for bit in 0..pattern[len].len() {
+                for sum in 0..0x100 {
+                    for xor in 0..0x100 {
+                        if !pattern[len][bit][sum][xor] {
+                            continue;
+                        }
+
                         for word in &dict.words {
-                            if len + word.len() >= pattern.len() {
+                            if len < word.len() {
                                 continue;
                             }
-                            let len = len + word.len();
+
+                            let len = len - word.len();
+                            if !satisfy_option_constraint(expected_memory, len, word) {
+                                continue;
+                            }
+
                             let mut bit = bit;
                             let mut sum = sum;
                             let mut xor = xor;
+
+                            let mut dbit = 0;
                             for &i in word {
                                 let c = CHAR_CODES[i] as usize;
-                                bit += c.count_ones() as usize;
-                                sum = (sum + c) & 0xFF;
+                                dbit += c.count_ones() as usize;
+                                sum = (sum - c) & 0xFF;
                                 xor ^= c;
                             }
-                            if bit >= pattern[len].len() {
+                            if bit < dbit {
                                 continue;
                             }
+                            bit -= dbit;
                             pattern[len][bit][sum][xor] = true;
+                            if bit > 1 {
+                                pattern[len][bit - 1][sum][xor] = true;
+                                pattern[len][bit - 1][(sum - 1) & 0xFF][xor] = true;
+                            }
+                            pattern[len][bit][(sum - 1) & 0xFF][xor] = true;
                         }
                     }
                 }
             }
         }
+
+        pattern
     }
 
-    fn is_number(index: usize) -> bool {
-        match index {
-            29 => true, // '0'
-            4 => true,  // '1'
-            10 => true, // '2'
-            16 => true, // '3'
-            22 => true, // '4'
-            28 => true, // '5'
-            5 => true,  // '6'
-            11 => true, // '7'
-            17 => true, // '8'
-            23 => true, // '9'
-            _ => false, //
+    fn build_pattern2(dict: &Dict, expected_memory: &Memory) -> Vec<Vec<Vec<Vec<bool>>>> {
+        eprintln!("calc DP2");
+
+        std::fs::create_dir_all("cache").unwrap();
+        let mut hasher = DefaultHasher::new();
+        dict.hash(&mut hasher);
+        OPT.prefix.hash(&mut hasher);
+        OPT.suffix.hash(&mut hasher);
+        let hash = hasher.finish();
+        let cache_path = format!("cache/pattern2_{}.bin", hash);
+
+        if !OPT.ignore_cache {
+            if let Ok(mut f) = std::fs::File::open(&cache_path) {
+                let mut pattern = Vec::new();
+                f.read_to_end(&mut pattern).unwrap();
+                return bincode::deserialize(&pattern[..]).unwrap();
+            }
+        }
+
+        let len = expected_memory.len();
+
+        let mut dp = vec![vec![vec![BitSet256::default(); 0x100]; 0x100]; len + 1];
+
+        {
+            let s0 = expected_memory.checkdigit2[0] as usize;
+            let s1 = expected_memory.checkdigit2[1] as usize;
+            let s2 = expected_memory.checkdigit5[0] as usize;
+            dp[len][s0][s1].flip(s2);
+        }
+
+        // by dict
+        // グラフを作って最外ループを無くしたいが、自分の環境だとメモリが足りないため断念
+        loop {
+            eprint!(".");
+            let mut updated = false;
+
+            let mut visited = vec![vec![vec![BitSet256::default(); 0x100]; 0x100]; len + 1];
+            {
+                let memory = Memory::new(expected_memory.len() as u8);
+                let s0 = memory.checkdigit2[0] as usize;
+                let s1 = memory.checkdigit2[1] as usize;
+                let s2 = memory.checkdigit5[0] as usize;
+                visited[0][s0][s1].flip(s2);
+            }
+
+            for len in 0..visited.len() {
+                for s0 in 0..0x100 {
+                    for s1 in 0..0x100 {
+                        for word in &dict.words {
+                            if len + word.len() >= visited.len() {
+                                continue;
+                            }
+
+                            if !satisfy_option_constraint(expected_memory, len, word) {
+                                continue;
+                            }
+
+                            let mut memory = Memory {
+                                checkdigit2: [s0 as u8, s1 as u8],
+                                password_len: 0,
+                                checkdigit5: [0, 0, 0, 0, 0],
+                            };
+
+                            forward_word(&mut memory, word);
+
+                            let next_len = len + word.len();
+                            let next_s0 = memory.checkdigit2[0] as usize;
+                            let next_s1 = memory.checkdigit2[1] as usize;
+                            let offset = memory.checkdigit5[0] as usize;
+
+                            let rotated = visited[len][s0][s1].rot_left(offset);
+                            visited[next_len][next_s0][next_s1] |= rotated;
+
+                            let rotated = dp[next_len][next_s0][next_s1].rot_right(offset);
+                            let prev = dp[len][s0][s1].clone();
+                            dp[len][s0][s1] |= &rotated & &visited[len][s0][s1];
+                            updated |= prev != dp[len][s0][s1];
+
+                            // for s2 in 0..0x100 {
+                            //     if !visited[len][s0][s1][s2] {
+                            //         continue;
+                            //     }
+
+                            //     let next_s2 = (s2 + memory.checkdigit5[0] as usize) & 0xFF;
+                            //     visited[next_len][next_s0][next_s1][next_s2] = true;
+
+                            //     if !dp[len][s0][s1][s2] && dp[next_len][next_s0][next_s1][next_s2] {
+                            //         dp[len][s0][s1][s2] = true;
+                            //         updated = true;
+                            //     }
+                            // }
+                        }
+                    }
+                }
+            }
+            if !updated {
+                let dp: Vec<_> = dp
+                    .into_iter()
+                    .map(|dp| {
+                        dp.into_iter()
+                            .map(|dp| dp.into_iter().map(|dp| dp.to_vec()).collect())
+                            .collect()
+                    })
+                    .collect();
+
+                std::fs::write(&cache_path, bincode::serialize(&dp).unwrap()).unwrap();
+                eprintln!();
+                break dp;
+            }
         }
     }
 
-    fn suffix_consecutive_digits_length(words: &Vec<usize>) -> usize {
-        (0..words.len())
-            .rev()
-            .take_while(|i| is_number(words[*i]))
-            .count() as usize
+    let pattern1 = build_pattern1(&dict, expected_memory);
+
+    let pattern2 = build_pattern2(&dict, expected_memory);
+
+    fn next(
+        append_word: &[usize],
+        expected_memory: &Memory,
+        memory: &Memory,
+        password: &mut Vec<usize>,
+    ) -> Option<Memory> {
+        if password.len() + append_word.len() > expected_memory.len() {
+            return None;
+        }
+
+        if !is_valid_password(expected_memory, password, append_word) {
+            return None;
+        }
+
+        let mut memory = memory.clone();
+        forward_word(&mut memory, append_word);
+
+        if memory.bit() > expected_memory.bit() {
+            return None;
+        }
+
+        password.extend(append_word);
+
+        Some(memory)
     }
 
     fn dfs_dict(
-        expected_memory: &Memory,
         dict: &Dict,
-        pattern: &Vec<Vec<Vec<Vec<bool>>>>,
-        len: usize,
-        bit: usize,
-        sum: usize,
-        xor: usize,
-        words: &mut Vec<usize>,
+        pattern1: &[Vec<Vec<Vec<bool>>>],
+        pattern2: &[Vec<Vec<Vec<bool>>>],
+        expected_memory: &Memory,
+        memory: &Memory,
+        password: &[usize],
     ) {
-        if !pattern[len][bit][sum][xor] {
+        let len = password.len();
+        let bit = memory.bit();
+        let sum = memory.sum();
+        let xor = memory.xor();
+        if !pattern1[len][bit][sum][xor] {
             return;
         }
 
-        if len == 0 {
-            // eprintln!(
-            //     "checking: {}",
-            //     words
-            //         .iter()
-            //         .map(|&p| CODE2CHAR[CHAR_CODES[p] as usize])
-            //         .collect::<String>()
-            // );
-            if satisfy(words, expected_memory) {
-                eprintln!(
-                    "find: {:?}, {}",
-                    &words,
-                    words
-                        .iter()
-                        .map(|&p| CODE2CHAR[CHAR_CODES[p] as usize])
-                        .collect::<String>()
-                );
-                panic!();
-            }
+        let s0 = memory.checkdigit2[0] as usize;
+        let s1 = memory.checkdigit2[1] as usize;
+        let s2 = memory.checkdigit5[0] as usize;
+        if !pattern2[len][s0][s1][s2] {
             return;
         }
 
-        for w in &dict.words {
-            if w.len() > len {
-                continue;
+        if OPT.verbose {
+            eprintln!(
+                "checking: {}",
+                password
+                    .iter()
+                    .map(|&p| CODE2CHAR[CHAR_CODES[p] as usize])
+                    .collect::<String>()
+            );
+        }
+
+        if len == expected_memory.len() {
+            if memory == expected_memory {
+                println!("find: {:?}, {}", &password, to_string(password));
             }
 
-            // . or - の記号の連続はスキップ
-            if (w[0] == 39 || w[0] == 33)
-                && (words.last() == Some(&39) || words.last() == Some(&33))
-            {
-                continue;
-            }
+            return;
+        }
 
-            if suffix_consecutive_digits_length(words) == 4 && is_number(w[0]) {
-                continue;
-            }
-
-            let mut len = len;
-            let mut bit = bit as isize;
-            let mut sum = sum;
-            let mut xor = xor;
-
-            for &i in w {
-                let c = CHAR_CODES[i] as usize;
-
-                len -= 1;
-                sum = (sum - c) & 0xFF;
-                bit = bit - c.count_ones() as isize;
-                xor = xor ^ c;
-            }
-
-            if bit >= 0 {
-                words.extend(w);
+        dict.words.par_iter().for_each(|word| {
+            let mut password = password.to_vec();
+            if let Some(memory) = next(word, expected_memory, memory, &mut password) {
                 dfs_dict(
-                    expected_memory,
                     dict,
-                    pattern,
-                    len,
-                    bit as usize,
-                    sum,
-                    xor,
-                    words,
+                    pattern1,
+                    pattern2,
+                    expected_memory,
+                    &memory,
+                    &password,
                 );
-                for _ in 0..w.len() {
-                    words.pop();
-                }
             }
-        }
+        });
     }
 
     eprintln!("start search");
-    for dbit in 0..=bit {
-        for dsum in 0..=0x05 {
-            let sum = (sum - dsum) & 0xFF;
-            let bit = bit - dbit;
-            eprintln!("check {} {}", dbit, dsum);
-            if pattern[len][bit][sum][xor] {
-                dfs_dict(
-                    &expected_memory,
-                    &dict,
-                    &pattern,
-                    len,
-                    bit,
-                    sum,
-                    xor,
-                    &mut Vec::new(),
-                );
-            }
-        }
-    }
+
+    let memory = Memory::new(expected_memory.len() as u8);
+    let password = Vec::new();
+    dfs_dict(
+        &dict,
+        &pattern1,
+        &pattern2,
+        expected_memory,
+        &memory,
+        &password,
+    );
 }

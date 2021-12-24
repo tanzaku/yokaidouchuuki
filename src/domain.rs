@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use once_cell::sync::Lazy;
 
 use crate::cpu::Memory;
@@ -74,14 +76,14 @@ pub const EXPECTED_MEMORY_KID: Memory = Memory {
     checkdigit5: [0x3A, 0xE9, 0x08, 0x23, 0x07],
 };
 
-// 8文字
+// 8文字 818-6104
 pub const EXPECTED_MEMORY_8: Memory = Memory {
     checkdigit2: [0xDC, 0xD9],
     password_len: 0x08,
     checkdigit5: [0xA3, 0xE3, 0x17, 0x28, 0x15],
 };
 
-// 11文字
+// 11文字 HENTAIOSUGI
 // yokai03.exe 64 98 0B 15 91 18 B1 15
 pub const EXPECTED_MEMORY_11: Memory = Memory {
     checkdigit2: [0x64, 0x98],
@@ -96,3 +98,76 @@ pub const EXPECTED_MEMORY_14: Memory = Memory {
     password_len: 0x0E,
     checkdigit5: [0xAC, 0xE9, 0x07, 0x33, 0x25],
 };
+
+// 14文字(monitorのところにあるハッシュ値)
+pub const EXPECTED_MEMORY_14_2: Memory = Memory {
+    checkdigit2: [0x51, 0x62],
+    password_len: 0x0E,
+    checkdigit5: [0xFD, 0x39, 0x03, 0xCB, 0x26],
+};
+
+pub fn to_charcode_indices(password: &str) -> Vec<usize> {
+    let mut result = Vec::new();
+    for c in password.chars() {
+        let c = CODE2CHAR.iter().position(|&x| x == c).unwrap();
+        let i = CHAR_CODES.iter().position(|&x| x as usize == c).unwrap();
+        result.push(i);
+    }
+    result
+}
+
+pub fn is_number(index: usize) -> bool {
+    matches!(index, 29 | 4 | 10 | 16 | 22 | 28 | 5 | 11 | 17 | 23)
+}
+
+pub fn is_symbol(index: usize) -> bool {
+    matches!(index, 39 | 33 | 35)
+}
+
+pub fn is_vowel(index: usize) -> bool {
+    //              A   I    U    E   O    Y
+    matches!(index, 0 | 7 | 38 | 24 | 2 | 21)
+}
+
+pub fn is_alpha(index: usize) -> bool {
+    matches!(
+        index,
+        0 | 6
+            | 12
+            | 18
+            | 24
+            | 30
+            | 36
+            | 1
+            | 7
+            | 13
+            | 19
+            | 25
+            | 31
+            | 37
+            | 2
+            | 8
+            | 14
+            | 20
+            | 26
+            | 32
+            | 38
+            | 3
+            | 9
+            | 15
+            | 21
+            | 27
+    )
+}
+
+pub fn to_string(password: &[usize]) -> String {
+    password
+        .iter()
+        .map(|&p| CODE2CHAR[CHAR_CODES[p] as usize])
+        .collect::<String>()
+}
+
+#[test]
+fn test() {
+    dbg!(to_charcode_indices("Y"));
+}
