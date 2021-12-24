@@ -125,7 +125,8 @@ pub fn is_symbol(index: usize) -> bool {
 }
 
 pub fn is_vowel(index: usize) -> bool {
-    matches!(index, 0 | 7 | 38 | 24 | 2)
+    //              A   I    U    E   O    Y
+    matches!(index, 0 | 7 | 38 | 24 | 2 | 21)
 }
 
 pub fn is_alpha(index: usize) -> bool {
@@ -164,4 +165,9 @@ pub fn to_string(password: &[usize]) -> String {
         .iter()
         .map(|&p| CODE2CHAR[CHAR_CODES[p] as usize])
         .collect::<String>()
+}
+
+#[test]
+fn test() {
+    dbg!(to_charcode_indices("Y"));
 }
