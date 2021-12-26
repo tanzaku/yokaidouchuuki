@@ -1,5 +1,14 @@
+use once_cell::sync::Lazy;
+
 use crate::domain::CHAR_CODES;
 
+#[derive(Debug, PartialEq, Eq, Clone)]
+struct Register {
+    a: u8,
+    c: u8,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
 struct Cpu {
     reg: Register,
 }
@@ -53,11 +62,6 @@ impl std::fmt::Debug for Memory {
     }
 }
 
-struct Register {
-    a: u8,
-    c: u8,
-}
-
 impl Cpu {
     fn set_carry(&mut self, c: u8) {
         self.reg.c = c;
@@ -85,17 +89,41 @@ impl Cpu {
     }
 }
 
-fn calc_checkdigit1(cpu: &mut Cpu, memory: &mut Memory) {
-    for i in (0..8).rev() {
-        cpu.set_carry(cpu.reg.a >> i & 1);
-
-        memory.checkdigit2[0] = cpu.ror(memory.checkdigit2[0]);
-        memory.checkdigit2[1] = cpu.ror(memory.checkdigit2[1]);
-        if cpu.reg.c == 1 {
-            memory.checkdigit2[0] ^= 0x84;
-            memory.checkdigit2[1] ^= 0x08;
+static CALC_CHECKDIGITS1_CACHE: Lazy<[[u8; 3]; 0x100]> = Lazy::new(|| {
+    let mut cache = [[0; 3]; 0x100];
+    for i in 0..0x100 {
+        let mut v = i;
+        for j in 0..8 {
+            cache[i][1] >>= 1;
+            cache[i][1] |= cache[i][0] << 7;
+            cache[i][0] >>= 1;
+            if (v & 1) == 1 {
+                cache[i][0] ^= 0x84;
+                cache[i][1] ^= 0x08;
+                v ^= 0x10;
+            }
+            if j == 7 {
+                cache[i][2] = (v & 1) as u8;
+            }
+            v >>= 1;
         }
     }
+    cache
+});
+
+fn bit_reverse(v: u8) -> u8 {
+    let v = (v & 0x55) << 1 | (v >> 1 & 0x55);
+    let v = (v & 0x33) << 2 | (v >> 2 & 0x33);
+    let v = (v & 0x0f) << 4 | (v >> 4 & 0x0f);
+    v
+}
+
+fn calc_checkdigit1(cpu: &mut Cpu, memory: &mut Memory) {
+    let v = bit_reverse(cpu.reg.a);
+    let i = memory.checkdigit2[1] as usize;
+    cpu.set_carry(CALC_CHECKDIGITS1_CACHE[i][2]);
+    memory.checkdigit2[1] = memory.checkdigit2[0] ^ CALC_CHECKDIGITS1_CACHE[i][1];
+    memory.checkdigit2[0] = v ^ CALC_CHECKDIGITS1_CACHE[i][0];
 }
 
 fn calc_checkdigit2(cpu: &mut Cpu, memory: &mut Memory) {
@@ -149,4 +177,56 @@ pub fn satisfy(password: &[usize], expected_memory: &Memory) -> bool {
     }
 
     expected_memory == &memory
+}
+
+#[test]
+fn test_bit_reverse() {
+    assert_eq!(bit_reverse(0x01), 0x80);
+    assert_eq!(bit_reverse(0x02), 0x40);
+    assert_eq!(bit_reverse(0x04), 0x20);
+    assert_eq!(bit_reverse(0x08), 0x10);
+    assert_eq!(bit_reverse(0x10), 0x08);
+    assert_eq!(bit_reverse(0x20), 0x04);
+    assert_eq!(bit_reverse(0x40), 0x02);
+    assert_eq!(bit_reverse(0x80), 0x01);
+}
+
+#[test]
+fn test_calc_checkdigit1() {
+    fn calc_checkdigit1_naive(cpu: &mut Cpu, memory: &mut Memory) {
+        for i in (0..8).rev() {
+            cpu.set_carry(cpu.reg.a >> i & 1);
+
+            memory.checkdigit2[0] = cpu.ror(memory.checkdigit2[0]);
+            memory.checkdigit2[1] = cpu.ror(memory.checkdigit2[1]);
+            if cpu.reg.c == 1 {
+                memory.checkdigit2[0] ^= 0x84;
+                memory.checkdigit2[1] ^= 0x08;
+            }
+        }
+    }
+
+    for i in 0..0x100 {
+        for j in 0..0x100 {
+            for k in 0..0x100 {
+                let cpu = Cpu {
+                    reg: Register { a: i as u8, c: 0 },
+                };
+                let memory = Memory {
+                    checkdigit2: [j as u8, k as u8],
+                    password_len: 0,
+                    checkdigit5: [0, 0, 0, 0, 0],
+                };
+
+                let mut cpu1 = cpu.clone();
+                let mut memory1 = memory.clone();
+                let mut cpu2 = cpu.clone();
+                let mut memory2 = memory.clone();
+                calc_checkdigit1(&mut cpu1, &mut memory1);
+                calc_checkdigit1_naive(&mut cpu2, &mut memory2);
+                assert_eq!(cpu1, cpu2);
+                assert_eq!(memory1, memory2);
+            }
+        }
+    }
 }

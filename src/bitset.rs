@@ -1,4 +1,6 @@
-#[derive(Default, Clone, PartialEq, Eq)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct BitSet256 {
     // bit[3] bit[2] bit[1] bit[0]
     bit: [u64; 4],
@@ -68,6 +70,10 @@ impl BitSet256 {
             val[i] = self.get(i);
         }
         val
+    }
+
+    pub fn is_zero(&self) -> bool {
+        self.bit == [0, 0, 0, 0]
     }
 }
 

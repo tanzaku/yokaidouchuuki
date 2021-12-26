@@ -107,7 +107,7 @@ pub fn dict_search(expected_memory: &Memory) {
         pattern
     }
 
-    fn build_pattern2(dict: &Dict, expected_memory: &Memory) -> Vec<Vec<Vec<Vec<bool>>>> {
+    fn build_pattern2(dict: &Dict, expected_memory: &Memory) -> Vec<Vec<Vec<Vec<BitSet256>>>> {
         eprintln!("calc DP2");
 
         std::fs::create_dir_all("cache").unwrap();
@@ -128,94 +128,98 @@ pub fn dict_search(expected_memory: &Memory) {
 
         let len = expected_memory.len();
 
-        let mut dp = vec![vec![vec![BitSet256::default(); 0x100]; 0x100]; len + 1];
+        let mut dp = vec![vec![vec![vec![BitSet256::default(); 0x100]; 0x100]; 0x100]; len + 1];
 
         {
             let s0 = expected_memory.checkdigit2[0] as usize;
             let s1 = expected_memory.checkdigit2[1] as usize;
             let s2 = expected_memory.checkdigit5[0] as usize;
-            dp[len][s0][s1].flip(s2);
+            let s3 = expected_memory.checkdigit5[1] as usize;
+            dp[len][s0][s1][s2].flip(s3);
         }
 
         // by dict
         // グラフを作って最外ループを無くしたいが、自分の環境だとメモリが足りないため断念
+        let mut n = len;
         loop {
             eprint!(".");
             let mut updated = false;
 
-            let mut visited = vec![vec![vec![BitSet256::default(); 0x100]; 0x100]; len + 1];
+            let mut visited = vec![vec![[[BitSet256::default(); 0x100]; 0x100]; 0x100]; len + 1];
             {
                 let memory = Memory::new(expected_memory.len() as u8);
                 let s0 = memory.checkdigit2[0] as usize;
                 let s1 = memory.checkdigit2[1] as usize;
                 let s2 = memory.checkdigit5[0] as usize;
-                visited[0][s0][s1].flip(s2);
+                let s3 = memory.checkdigit5[1] as usize;
+                visited[0][s0][s1][s2].flip(s3);
             }
 
-            for len in 0..visited.len() {
+            for len in 0..n {
+                eprintln!("{}", len);
                 for s0 in 0..0x100 {
                     for s1 in 0..0x100 {
-                        for word in &dict.words {
-                            if len + word.len() >= visited.len() {
+                        for s2 in 0..0x100 {
+                            if visited[len][s0][s1][s2].is_zero() {
                                 continue;
                             }
 
-                            if !satisfy_option_constraint(expected_memory, len, word) {
-                                continue;
+                            for word in &dict.words {
+                                if len + word.len() >= visited.len() {
+                                    continue;
+                                }
+
+                                if !satisfy_option_constraint(expected_memory, len, word) {
+                                    continue;
+                                }
+
+                                let mut memory = Memory {
+                                    checkdigit2: [s0 as u8, s1 as u8],
+                                    password_len: 0,
+                                    checkdigit5: [s2 as u8, 0, 0, 0, 0],
+                                };
+
+                                forward_word(&mut memory, word);
+
+                                let next_len = len + word.len();
+                                let next_s0 = memory.checkdigit2[0] as usize;
+                                let next_s1 = memory.checkdigit2[1] as usize;
+                                let next_s2 = memory.checkdigit5[0] as usize;
+                                let offset = memory.checkdigit5[1] as usize;
+
+                                let rotated = visited[len][s0][s1][s2].rot_left(offset);
+                                visited[next_len][next_s0][next_s1][next_s2] |= rotated;
+
+                                let rotated =
+                                    dp[next_len][next_s0][next_s1][next_s2].rot_right(offset);
+                                let prev = dp[len][s0][s1][s2].clone();
+                                dp[len][s0][s1][s2] |= &rotated & &visited[len][s0][s1][s2];
+                                updated |= prev != dp[len][s0][s1][s2];
+
+                                // for s2 in 0..0x100 {
+                                //     if !visited[len][s0][s1][s2] {
+                                //         continue;
+                                //     }
+
+                                //     let next_s2 = (s2 + memory.checkdigit5[0] as usize) & 0xFF;
+                                //     visited[next_len][next_s0][next_s1][next_s2] = true;
+
+                                //     if !dp[len][s0][s1][s2] && dp[next_len][next_s0][next_s1][next_s2] {
+                                //         dp[len][s0][s1][s2] = true;
+                                //         updated = true;
+                                //     }
+                                // }
                             }
-
-                            let mut memory = Memory {
-                                checkdigit2: [s0 as u8, s1 as u8],
-                                password_len: 0,
-                                checkdigit5: [0, 0, 0, 0, 0],
-                            };
-
-                            forward_word(&mut memory, word);
-
-                            let next_len = len + word.len();
-                            let next_s0 = memory.checkdigit2[0] as usize;
-                            let next_s1 = memory.checkdigit2[1] as usize;
-                            let offset = memory.checkdigit5[0] as usize;
-
-                            let rotated = visited[len][s0][s1].rot_left(offset);
-                            visited[next_len][next_s0][next_s1] |= rotated;
-
-                            let rotated = dp[next_len][next_s0][next_s1].rot_right(offset);
-                            let prev = dp[len][s0][s1].clone();
-                            dp[len][s0][s1] |= &rotated & &visited[len][s0][s1];
-                            updated |= prev != dp[len][s0][s1];
-
-                            // for s2 in 0..0x100 {
-                            //     if !visited[len][s0][s1][s2] {
-                            //         continue;
-                            //     }
-
-                            //     let next_s2 = (s2 + memory.checkdigit5[0] as usize) & 0xFF;
-                            //     visited[next_len][next_s0][next_s1][next_s2] = true;
-
-                            //     if !dp[len][s0][s1][s2] && dp[next_len][next_s0][next_s1][next_s2] {
-                            //         dp[len][s0][s1][s2] = true;
-                            //         updated = true;
-                            //     }
-                            // }
                         }
                     }
                 }
             }
             if !updated {
-                let dp: Vec<_> = dp
-                    .into_iter()
-                    .map(|dp| {
-                        dp.into_iter()
-                            .map(|dp| dp.into_iter().map(|dp| dp.to_vec()).collect())
-                            .collect()
-                    })
-                    .collect();
-
                 std::fs::write(&cache_path, bincode::serialize(&dp).unwrap()).unwrap();
                 eprintln!();
                 break dp;
             }
+            n -= 1;
         }
     }
 
@@ -252,7 +256,7 @@ pub fn dict_search(expected_memory: &Memory) {
     fn dfs_dict(
         dict: &Dict,
         pattern1: &[Vec<Vec<Vec<bool>>>],
-        pattern2: &[Vec<Vec<Vec<bool>>>],
+        pattern2: &[Vec<Vec<Vec<BitSet256>>>],
         expected_memory: &Memory,
         memory: &Memory,
         password: &[usize],
@@ -268,7 +272,8 @@ pub fn dict_search(expected_memory: &Memory) {
         let s0 = memory.checkdigit2[0] as usize;
         let s1 = memory.checkdigit2[1] as usize;
         let s2 = memory.checkdigit5[0] as usize;
-        if !pattern2[len][s0][s1][s2] {
+        let s3 = memory.checkdigit5[1] as usize;
+        if !pattern2[len][s0][s1][s2].get(s3) {
             return;
         }
 
@@ -284,7 +289,7 @@ pub fn dict_search(expected_memory: &Memory) {
 
         if len == expected_memory.len() {
             if memory == expected_memory {
-                println!("find: {:?}, {}", &password, to_string(password));
+                println!("{}", to_string(password));
             }
 
             return;

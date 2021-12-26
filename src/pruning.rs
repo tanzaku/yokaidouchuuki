@@ -3,20 +3,63 @@ use once_cell::sync::Lazy;
 use crate::cpu::Memory;
 use crate::opt::OPT;
 
-use crate::domain::{is_alpha, is_number, is_symbol, is_vowel};
+use crate::domain::{
+    is_alpha, is_dot, is_exclamation_mark, is_number, is_symbol, is_vowel, to_charcode_index,
+    to_charcode_indices,
+};
 
 type Validator = fn(&Memory, &[usize], &[usize]) -> bool;
 
+static CAN_TRANSITION: Lazy<Vec<Vec<bool>>> = Lazy::new(|| {
+    let mut can_transition = vec![vec![false; 0x100]; 0x100];
+
+    for c0 in "AIUEOc0123456789N".chars() {
+        for c1 in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-!n".chars() {
+            can_transition[to_charcode_index(c0)][to_charcode_index(c1)] = true;
+        }
+    }
+
+    can_transition[to_charcode_index('n')][to_charcode_index('m')] = true;
+    can_transition[to_charcode_index('m')][to_charcode_index('c')] = true;
+    for c0 in ".-!".chars() {
+        for c1 in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789n".chars() {
+            can_transition[to_charcode_index(c0)][to_charcode_index(c1)] = true;
+        }
+    }
+
+    for c0 in "ABCDEFGHIJKLMNOPQRSTUVWXYZ".chars() {
+        // if c0 == 'F' || c0 == 'C' || c0 == 'L' || c0 == 'X' || c0 == 'V'  || c0 == 'Q' {
+        //     continue;
+        // }
+        for c1 in "AIUEO".chars() {
+            if c0 == 'W' && c1 != 'A' {
+                continue;
+            }
+            if c0 == 'D' && c1 != 'A' && c1 != 'O' {
+                continue;
+            }
+            can_transition[to_charcode_index(c0)][to_charcode_index(c1)] = true;
+        }
+    }
+
+    // KISSY, TYAN, CHAN, 的な文字列を受理
+
+    can_transition
+});
+
 static VALIDATORS: Lazy<Vec<Validator>> = Lazy::new(|| {
     let mut validators: Vec<Validator> = vec![
-        validate_option,
-        validate_first_char_is_symbol,
-        validate_consecutive_symbols,
-        validate_suffix_consecutive_digits_length,
+        // validate_option,
+        // validate_transition,
+        // validate_first_char_is_symbol,
+        // validate_consecutive_symbols,
+        // validate_suffix_consecutive_digits_length,
+        // validate_atmost_one_dot,
     ];
-    if !OPT.disable_japanese_pruning {
-        validators.push(validate_natural_japanese);
-    }
+
+    // if !OPT.disable_japanese_pruning {
+    //     validators.push(validate_natural_japanese);
+    // }
     validators
 });
 
@@ -48,6 +91,19 @@ pub fn satisfy_option_constraint(expected_memory: &Memory, index: usize, word: &
 // オプションによるvalidation
 fn validate_option(expected_memory: &Memory, password: &[usize], append_word: &[usize]) -> bool {
     satisfy_option_constraint(expected_memory, password.len(), append_word)
+}
+
+// 遷移テーブルによるvalidation
+fn validate_transition(
+    _expected_memory: &Memory,
+    password: &[usize],
+    append_word: &[usize],
+) -> bool {
+    if password.is_empty() {
+        return true;
+    }
+
+    CAN_TRANSITION[password[password.len() - 1]][append_word[0]]
 }
 
 /// 日本語として自然な言葉かどうかを検証する
@@ -173,6 +229,26 @@ fn validate_first_char_is_symbol(
     }
 
     !is_symbol(append_word[0])
+}
+
+fn validate_atmost_one_dot(
+    _expected_memory: &Memory,
+    password: &[usize],
+    append_word: &[usize],
+) -> bool {
+    if password.is_empty() {
+        return true;
+    }
+
+    if is_dot(append_word[0]) && password.iter().any(|&c| is_dot(c)) {
+        return false;
+    }
+
+    if is_exclamation_mark(append_word[0]) && password.iter().any(|&c| is_exclamation_mark(c)) {
+        return false;
+    }
+
+    true
 }
 
 pub fn is_valid_password(

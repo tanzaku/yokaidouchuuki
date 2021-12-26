@@ -106,14 +106,13 @@ pub const EXPECTED_MEMORY_14_2: Memory = Memory {
     checkdigit5: [0xFD, 0x39, 0x03, 0xCB, 0x26],
 };
 
+pub fn to_charcode_index(c: char) -> usize {
+    let c = CODE2CHAR.iter().position(|&x| x == c).unwrap();
+    CHAR_CODES.iter().position(|&x| x as usize == c).unwrap()
+}
+
 pub fn to_charcode_indices(password: &str) -> Vec<usize> {
-    let mut result = Vec::new();
-    for c in password.chars() {
-        let c = CODE2CHAR.iter().position(|&x| x == c).unwrap();
-        let i = CHAR_CODES.iter().position(|&x| x as usize == c).unwrap();
-        result.push(i);
-    }
-    result
+    password.chars().map(to_charcode_index).collect()
 }
 
 pub fn is_number(index: usize) -> bool {
@@ -127,6 +126,14 @@ pub fn is_symbol(index: usize) -> bool {
 pub fn is_vowel(index: usize) -> bool {
     //              A   I    U    E   O    Y
     matches!(index, 0 | 7 | 38 | 24 | 2 | 21)
+}
+
+pub fn is_dot(index: usize) -> bool {
+    index == 39
+}
+
+pub fn is_exclamation_mark(index: usize) -> bool {
+    index == 35
 }
 
 pub fn is_alpha(index: usize) -> bool {
@@ -169,5 +176,5 @@ pub fn to_string(password: &[usize]) -> String {
 
 #[test]
 fn test() {
-    dbg!(to_charcode_indices("Y"));
+    dbg!(to_charcode_indices("!"));
 }
