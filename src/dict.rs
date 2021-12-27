@@ -66,66 +66,6 @@ fn get_current_time() -> String {
 pub fn dict_search(expected_memory: &Memory) {
     let dict = Dict::new();
 
-    // fn build_pattern1(dict: &Dict, expected_memory: &Memory) -> Vec<Vec<Vec<Vec<bool>>>> {
-    //     eprintln!("calc DP1");
-
-    //     let bit = expected_memory.bit();
-    //     let len = expected_memory.len();
-    //     let sum = expected_memory.sum();
-    //     let xor = expected_memory.xor();
-
-    //     let mut pattern = vec![vec![vec![vec![false; 0x100]; 0x100]; bit + 1]; len + 1];
-
-    //     pattern[len][bit][sum][xor] = true;
-
-    //     for len in (0..pattern.len()).rev() {
-    //         for bit in 0..pattern[len].len() {
-    //             for sum in 0..0x100 {
-    //                 for xor in 0..0x100 {
-    //                     if !pattern[len][bit][sum][xor] {
-    //                         continue;
-    //                     }
-
-    //                     for word in &dict.words {
-    //                         if len < word.len() {
-    //                             continue;
-    //                         }
-
-    //                         let len = len - word.len();
-    //                         if !satisfy_option_constraint(expected_memory, len, word) {
-    //                             continue;
-    //                         }
-
-    //                         let mut bit = bit;
-    //                         let mut sum = sum;
-    //                         let mut xor = xor;
-
-    //                         let mut dbit = 0;
-    //                         for &i in word {
-    //                             let c = CHAR_CODES[i] as usize;
-    //                             dbit += c.count_ones() as usize;
-    //                             sum = (sum - c) & 0xFF;
-    //                             xor ^= c;
-    //                         }
-    //                         if bit < dbit {
-    //                             continue;
-    //                         }
-    //                         bit -= dbit;
-    //                         pattern[len][bit][sum][xor] = true;
-    //                         if bit > 1 {
-    //                             pattern[len][bit - 1][sum][xor] = true;
-    //                             pattern[len][bit - 1][(sum - 1) & 0xFF][xor] = true;
-    //                         }
-    //                         pattern[len][bit][(sum - 1) & 0xFF][xor] = true;
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //     }
-
-    //     pattern
-    // }
-
     fn build_pattern1(dict: &Dict, expected_memory: &Memory) -> Vec<Vec<Vec<Vec<BitSet256>>>> {
         eprintln!("calc DP1 ({})", get_current_time());
 
@@ -186,9 +126,9 @@ pub fn dict_search(expected_memory: &Memory) {
                                     continue;
                                 }
 
-                                // if !satisfy_option_constraint(expected_memory, len, word) {
-                                //     continue;
-                                // }
+                                if !satisfy_option_constraint(expected_memory, len, word) {
+                                    continue;
+                                }
 
                                 let mut memory = Memory {
                                     checkdigit2: [s0 as u8, s1 as u8],
@@ -227,7 +167,12 @@ pub fn dict_search(expected_memory: &Memory) {
         }
     }
 
-    fn build_pattern2(dict: &Dict, expected_memory: &Memory) -> Vec<Vec<Vec<Vec<BitSet256>>>> {
+    #[inline]
+    fn pattern2_index(len: usize, s0: usize, s1: usize, s2: usize) -> usize {
+        ((len * 0x100 + s0) * 0x100 + s1) * 0x100 + s2
+    }
+
+    fn build_pattern2(dict: &Dict, expected_memory: &Memory) -> Vec<BitSet256> {
         eprintln!("calc DP2 ({})", get_current_time());
 
         std::fs::create_dir_all("cache").unwrap();
@@ -247,14 +192,14 @@ pub fn dict_search(expected_memory: &Memory) {
 
         let len = expected_memory.len();
 
-        let mut dp = vec![vec![vec![vec![BitSet256::default(); 0x100]; 0x100]; 0x100]; len + 1];
+        let mut dp = vec![BitSet256::default(); 0x100 * 0x100 * 0x100 * (len + 1)];
 
         {
             let s0 = expected_memory.checkdigit2[0] as usize;
             let s1 = expected_memory.checkdigit2[1] as usize;
             let s2 = expected_memory.checkdigit5[0] as usize;
             let s3 = expected_memory.checkdigit5[1] as usize;
-            dp[len][s0][s1][s2].flip(s3);
+            dp[pattern2_index(len, s0, s1, s2)].flip(s3);
         }
 
         // by dict
@@ -263,14 +208,14 @@ pub fn dict_search(expected_memory: &Memory) {
         loop {
             let mut updated = false;
 
-            let mut visited = vec![vec![[[BitSet256::default(); 0x100]; 0x100]; 0x100]; len + 1];
+            let mut visited = vec![BitSet256::default(); 0x100 * 0x100 * 0x100 * (len + 1)];
             {
                 let memory = Memory::new(expected_memory.len() as u8);
                 let s0 = memory.checkdigit2[0] as usize;
                 let s1 = memory.checkdigit2[1] as usize;
                 let s2 = memory.checkdigit5[0] as usize;
                 let s3 = memory.checkdigit5[1] as usize;
-                visited[0][s0][s1][s2].flip(s3);
+                visited[pattern2_index(0, s0, s1, s2)].flip(s3);
             }
 
             for len in 0..n {
@@ -278,7 +223,8 @@ pub fn dict_search(expected_memory: &Memory) {
                 for s0 in 0..0x100 {
                     for s1 in 0..0x100 {
                         for s2 in 0..0x100 {
-                            if visited[len][s0][s1][s2].is_zero() {
+                            let i = pattern2_index(len, s0, s1, s2);
+                            if visited[i].is_zero() {
                                 continue;
                             }
 
@@ -287,9 +233,9 @@ pub fn dict_search(expected_memory: &Memory) {
                                     continue;
                                 }
 
-                                // if !satisfy_option_constraint(expected_memory, len, word) {
-                                //     continue;
-                                // }
+                                if !satisfy_option_constraint(expected_memory, len, word) {
+                                    continue;
+                                }
 
                                 let mut memory = Memory {
                                     checkdigit2: [s0 as u8, s1 as u8],
@@ -305,14 +251,14 @@ pub fn dict_search(expected_memory: &Memory) {
                                 let next_s2 = memory.checkdigit5[0] as usize;
                                 let offset = memory.checkdigit5[1] as usize;
 
-                                let rotated = visited[len][s0][s1][s2].rot_left(offset);
-                                visited[next_len][next_s0][next_s1][next_s2] |= rotated;
+                                let rotated = visited[i].rot_left(offset);
+                                let j = pattern2_index(next_len, next_s0, next_s1, next_s2);
+                                visited[j] |= rotated;
 
-                                let rotated =
-                                    dp[next_len][next_s0][next_s1][next_s2].rot_right(offset);
-                                let prev = dp[len][s0][s1][s2].clone();
-                                dp[len][s0][s1][s2] |= &rotated & &visited[len][s0][s1][s2];
-                                updated |= prev != dp[len][s0][s1][s2];
+                                let rotated = dp[j].rot_right(offset);
+                                let prev = dp[i].clone();
+                                dp[i] |= &rotated & &visited[i];
+                                updated |= prev != dp[i];
                             }
                         }
                     }
@@ -358,21 +304,11 @@ pub fn dict_search(expected_memory: &Memory) {
         Some(memory)
     }
 
-    // {
-    //     let mut password = Vec::new();
-    //     dict.words.iter().take(5).for_each(|word| {
-    //         password.extend(word.iter().map(|&c| c as u8));
-    //         password.push(0xFF);
-    //     });
-    //     std::fs::write("progress.txt", &password).unwrap();
-    // }
-
     fn dfs_dict(
         dict: &Dict,
-        cache: &mut Vec<u8>,
+        cache: &mut Vec<String>,
         pattern1: &[Vec<Vec<Vec<BitSet256>>>],
-        // pattern1: &[Vec<Vec<Vec<bool>>>],
-        pattern2: &[Vec<Vec<Vec<BitSet256>>>],
+        pattern2: &[BitSet256],
         expected_memory: &Memory,
         memory: &Memory,
         password: &[usize],
@@ -386,7 +322,8 @@ pub fn dict_search(expected_memory: &Memory) {
             let s2 = memory.checkdigit5[0] as usize;
 
             let s3 = memory.checkdigit5[1] as usize;
-            if !pattern2[len][s0][s1][s2].get(s3) {
+            let i = pattern2_index(len, s0, s1, s2);
+            if !pattern2[i].get(s3) {
                 return;
             }
 
@@ -394,13 +331,6 @@ pub fn dict_search(expected_memory: &Memory) {
             if !pattern1[len][s0][s1][s3].get(s2) {
                 return;
             }
-
-            // let bit = memory.bit();
-            // let sum = memory.sum();
-            // let xor = memory.xor();
-            // if !pattern1[len][bit][sum][xor] {
-            //     return;
-            // }
         }
 
         if OPT.verbose {
@@ -431,16 +361,13 @@ pub fn dict_search(expected_memory: &Memory) {
                         get_current_time()
                     );
 
-                    let password_u8 = {
-                        let mut password_u8: Vec<_> = password.iter().map(|&p| p as u8).collect();
-                        password_u8.push(0xFF);
-                        password_u8
+                    let password_text = {
+                        let mut password_text = String::new();
+                        password_text.push_str(&to_string(&password));
+                        password_text
                     };
 
-                    if cache
-                        .par_windows(password_u8.len())
-                        .any(|cache| cache == password_u8)
-                    {
+                    if cache.contains(&password_text) {
                         eprintln!("skipped");
                         return;
                     }
@@ -457,8 +384,8 @@ pub fn dict_search(expected_memory: &Memory) {
                             || SPECIFIC_CHARS.par_iter().any(|c| word.contains(c)),
                     );
 
-                    cache.extend(password_u8);
-                    std::fs::write("progress.txt", &cache).unwrap();
+                    cache.push(password_text);
+                    std::fs::write("progress.txt", cache.join("\n")).unwrap();
                 }
             });
         } else {
@@ -485,7 +412,11 @@ pub fn dict_search(expected_memory: &Memory) {
 
     let memory = Memory::new(expected_memory.len() as u8);
     let password = Vec::new();
-    let mut cache = std::fs::read("progress.txt").unwrap_or_default();
+    let mut cache: Vec<_> = std::fs::read_to_string("progress.txt")
+        .unwrap_or_default()
+        .lines()
+        .map(|s| s.to_owned())
+        .collect();
     dfs_dict(
         &dict,
         &mut cache,

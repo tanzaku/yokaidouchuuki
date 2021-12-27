@@ -3,3 +3,6 @@
 *.txt
 *.bin
 *.sh
+
+passwords/
+misc/
