@@ -49,7 +49,7 @@ static CAN_TRANSITION: Lazy<Vec<Vec<bool>>> = Lazy::new(|| {
 
 static VALIDATORS: Lazy<Vec<Validator>> = Lazy::new(|| {
     let mut validators: Vec<Validator> = vec![
-        validate_option,
+        // validate_option,
         // validate_transition,
         // validate_first_char_is_symbol,
         // validate_consecutive_symbols,

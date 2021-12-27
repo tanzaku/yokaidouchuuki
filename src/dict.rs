@@ -126,9 +126,9 @@ pub fn dict_search(expected_memory: &Memory) {
                                     continue;
                                 }
 
-                                if !satisfy_option_constraint(expected_memory, len, word) {
-                                    continue;
-                                }
+                                // if !satisfy_option_constraint(expected_memory, len, word) {
+                                //     continue;
+                                // }
 
                                 let mut memory = Memory {
                                     checkdigit2: [s0 as u8, s1 as u8],
@@ -159,8 +159,8 @@ pub fn dict_search(expected_memory: &Memory) {
             }
             eprintln!();
             if !updated {
-                // let mut f = BufWriter::new(File::create(&cache_path).unwrap());
-                // bincode::serialize_into(&mut f, &dp).unwrap();
+                let mut f = BufWriter::new(File::create(&cache_path).unwrap());
+                bincode::serialize_into(&mut f, &dp).unwrap();
                 break dp;
             }
             n -= 1;
@@ -233,9 +233,9 @@ pub fn dict_search(expected_memory: &Memory) {
                                     continue;
                                 }
 
-                                if !satisfy_option_constraint(expected_memory, len, word) {
-                                    continue;
-                                }
+                                // if !satisfy_option_constraint(expected_memory, len, word) {
+                                //     continue;
+                                // }
 
                                 let mut memory = Memory {
                                     checkdigit2: [s0 as u8, s1 as u8],
@@ -266,8 +266,8 @@ pub fn dict_search(expected_memory: &Memory) {
             }
             eprintln!();
             if !updated {
-                // let mut f = BufWriter::new(File::create(&cache_path).unwrap());
-                // bincode::serialize_into(&mut f, &dp).unwrap();
+                let mut f = BufWriter::new(File::create(&cache_path).unwrap());
+                bincode::serialize_into(&mut f, &dp).unwrap();
                 break dp;
             }
             n -= 1;
