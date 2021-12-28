@@ -58,6 +58,53 @@ pub static CODE2CHAR: Lazy<[char; 0x100]> = Lazy::new(|| {
     table
 });
 
+pub static CODE2INDEX: Lazy<[usize; 0x100]> = Lazy::new(|| {
+    let mut table = [!0; 0x100];
+    table[0x00] = 0;
+    table[0x01] = 1;
+    table[0x02] = 2;
+    table[0x03] = 3;
+    table[0x04] = 4;
+    table[0x05] = 5;
+    table[0x08] = 6;
+    table[0x09] = 7;
+    table[0x0A] = 8;
+    table[0x0B] = 9;
+    table[0x0C] = 10;
+    table[0x0D] = 11;
+    table[0x10] = 12;
+    table[0x11] = 13;
+    table[0x12] = 14;
+    table[0x13] = 15;
+    table[0x14] = 16;
+    table[0x15] = 17;
+    table[0x18] = 18;
+    table[0x19] = 19;
+    table[0x1A] = 20;
+    table[0x1B] = 21;
+    table[0x1C] = 22;
+    table[0x1D] = 23;
+    table[0x20] = 24;
+    table[0x21] = 25;
+    table[0x22] = 26;
+    table[0x23] = 27;
+    table[0x24] = 28;
+    table[0x25] = 29;
+    table[0x28] = 30;
+    table[0x29] = 31;
+    table[0x2A] = 32;
+    table[0x2B] = 33;
+    table[0x2C] = 34;
+    table[0x2D] = 35;
+    table[0x30] = 36;
+    table[0x31] = 37;
+    table[0x32] = 38;
+    table[0x33] = 39;
+    table[0x34] = 40;
+    table[0x35] = 41;
+    table
+});
+
 // 未知のパスワード1(11桁)を解析する
 // yokai03.exe 64 98 0B 15 91 18 B1 15
 // 64: a[10]の逆順

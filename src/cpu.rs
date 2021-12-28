@@ -165,7 +165,7 @@ pub fn forward_step(memory: &mut Memory, a: u8) {
 #[allow(non_snake_case)]
 pub fn forward_step_simd(
     memory: &Memory,
-    a: u8x32,
+    a: &Vec<u8x32>,
 ) -> (u8x32, u8x32, u8x32, u8x32, u8x32, u8x32, u8x32) {
     let mut a31F4 = u8x32::splat(memory.checkdigit2[0]);
     let mut a31F5 = u8x32::splat(memory.checkdigit2[1]);
@@ -175,51 +175,53 @@ pub fn forward_step_simd(
     let mut a31FA = u8x32::splat(memory.checkdigit5[3]);
     let mut a31FB = u8x32::splat(memory.checkdigit5[4]);
 
-    {
-        let mut a = a.clone();
+    for &a in a {
+        {
+            let mut a = a.clone();
 
-        // コンパイラがループアンローリングしてくれることを祈るループ
-        for _ in 0..8 {
-            let c = a & 0x80;
-            a <<= 1;
-            let c1 = a31F4 << 7;
-            a31F4 = (a31F4 >> 1) | c;
-            let c = a31F5 & 0x01;
-            a31F5 = (a31F5 >> 1) | c1;
+            // コンパイラがループアンローリングしてくれることを祈るループ
+            for _ in 0..8 {
+                let c = a & 0x80;
+                a <<= 1;
+                let c1 = a31F4 << 7;
+                a31F4 = (a31F4 >> 1) | c;
+                let c = a31F5 & 0x01;
+                a31F5 = (a31F5 >> 1) | c1;
 
-            a31F4 ^= c << 7 | c << 2;
-            a31F5 ^= c << 3;
+                a31F4 ^= c << 7 | c << 2;
+                a31F5 ^= c << 3;
+            }
         }
-    }
 
-    #[inline]
-    fn add(a: u8x32, b: u8x32, c: u8x32) -> (u8x32, u8x32) {
-        let sum = a + b + c;
-        let c = (a & b) | ((a | b) & !sum);
-        (sum, c & 0x80)
-    }
+        #[inline]
+        fn add(a: u8x32, b: u8x32, c: u8x32) -> (u8x32, u8x32) {
+            let sum = a + b + c;
+            let c = (a & b) | ((a | b) & !sum);
+            (sum, c & 0x80)
+        }
 
-    {
-        let c0xE5 = u8x32::splat(0xE5);
-        let c = u8x32::from_bits(a31F4.ge(c0xE5)) >> 7;
+        {
+            let c0xE5 = u8x32::splat(0xE5);
+            let c = u8x32::from_bits(a31F4.ge(c0xE5)) >> 7;
 
-        // dbg!(a, a31F7, a31F4, c);
-        // dbg!(a, a31F7, c);
+            // dbg!(a, a31F7, a31F4, c);
+            // dbg!(a, a31F7, c);
 
-        let v = a + c; // ここでオーバーフローは発生し得ない
-        a31F7 += v;
-        let mut c = u8x32::from_bits(a31F7.lt(v)) >> 7;
+            let v = a + c; // ここでオーバーフローは発生し得ない
+            a31F7 += v;
+            let mut c = u8x32::from_bits(a31F7.lt(v)) >> 7;
 
-        // dbg!(a31F8, a31F5, c, a31F7, v);
+            // dbg!(a31F8, a31F5, c, a31F7, v);
 
-        (a31F8, c) = add(a31F8, a31F5, c);
-        a31F9 ^= a;
+            (a31F8, c) = add(a31F8, a31F5, c);
+            a31F9 ^= a;
 
-        let c1 = a31FA & 0x01;
-        a31FA = (a31FA >> 1) | c;
-        (a31FA, c) = add(a31FA, a, c1);
-        // dbg!(a31FB, a.count_ones(), c);
-        a31FB += a.count_ones() + (c >> 7);
+            let c1 = a31FA & 0x01;
+            a31FA = (a31FA >> 1) | c;
+            (a31FA, c) = add(a31FA, a, c1);
+            // dbg!(a31FB, a.count_ones(), c);
+            a31FB += a.count_ones() + (c >> 7);
+        }
     }
 
     (a31F4, a31F5, a31F7, a31F8, a31F9, a31FA, a31FB)
@@ -305,7 +307,8 @@ fn test_calc_simd() {
             0x1C, 0x1D, 0x1E, 0x1F,
         );
 
-        let (a31F4, a31F5, a31F7, a31F8, a31F9, a31FA, a31FB) = forward_step_simd(&memory, a);
+        let (a31F4, a31F5, a31F7, a31F8, a31F9, a31FA, a31FB) =
+            forward_step_simd(&memory, &vec![a]);
 
         for i in 0..0x20 {
             if memory.checkdigit2[1] != 1 {
@@ -331,7 +334,8 @@ fn test_calc_simd() {
             0x3C, 0x3D, 0x3E, 0x3F,
         );
 
-        let (a31F4, a31F5, a31F7, a31F8, a31F9, a31FA, a31FB) = forward_step_simd(&memory, a);
+        let (a31F4, a31F5, a31F7, a31F8, a31F9, a31FA, a31FB) =
+            forward_step_simd(&memory, &vec![a]);
 
         for i in 0x20..0x40 {
             let mut memory = memory.clone();

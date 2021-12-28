@@ -8,13 +8,14 @@ use std::sync::{Arc, Mutex};
 
 use chrono::Utc;
 use once_cell::sync::Lazy;
+use packed_simd_2::u8x32;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use rayon::slice::ParallelSlice;
 
 use crate::bitset::BitSet256;
-use crate::cpu::{forward_word, Memory};
+use crate::cpu::{forward_step_simd, forward_word, Memory};
 
-use crate::domain::{to_charcode_index, to_string, CHAR_CODES, CODE2CHAR};
+use crate::domain::{to_charcode_index, to_string, CHAR_CODES, CODE2CHAR, CODE2INDEX};
 use crate::opt::OPT;
 use crate::pruning::{is_valid_password, satisfy_option_constraint};
 
@@ -218,6 +219,7 @@ pub fn dict_search(expected_memory: &Memory) {
             let mut updated = false;
 
             let mut visited = vec![BitSet256::default(); 0x100 * 0x100 * 0x100 * (len + 1)];
+
             {
                 let memory = Memory::new(expected_memory.len() as u8);
                 let s0 = memory.checkdigit2[0] as usize;
@@ -287,7 +289,71 @@ pub fn dict_search(expected_memory: &Memory) {
 
     let pattern2 = build_pattern2(&dict, expected_memory);
 
+    let dict3 = {
+        let mut dict3s = Vec::new();
+        fn init_dict3(dict: &Dict, cur_word: &mut Vec<usize>, dict3s: &mut Vec<Vec<usize>>) {
+            if cur_word.len() == 3 {
+                dict3s.push(cur_word.clone());
+                return;
+            }
+
+            for word in &dict.words {
+                if cur_word.len() + word.len() > 3 {
+                    continue;
+                }
+                cur_word.extend(word);
+                init_dict3(dict, cur_word, dict3s);
+                cur_word.truncate(cur_word.len() - word.len());
+            }
+        }
+        init_dict3(&dict, &mut Vec::new(), &mut dict3s);
+
+        let mut dict3 = Vec::new();
+        for d in dict3s.chunks(32) {
+            let mut vec = Vec::new();
+            for i in 0..3 {
+                let v: Vec<_> = d
+                    .iter()
+                    .map(|w| CHAR_CODES[w[i]])
+                    .chain(std::iter::repeat(0xFF))
+                    .take(32)
+                    .collect();
+                vec.push(u8x32::from_slice_unaligned(&v));
+            }
+
+            dict3.push(vec);
+        }
+        dict3
+    };
+
+    fn is_valid_pattern(
+        pattern1: &[BitSet256],
+        pattern2: &[BitSet256],
+        len: usize,
+        memory: &Memory,
+    ) -> bool {
+        let s0 = memory.checkdigit2[0] as usize;
+        let s1 = memory.checkdigit2[1] as usize;
+        let s2 = memory.checkdigit5[0] as usize;
+
+        let s3 = memory.checkdigit5[1] as usize;
+        let i = pattern2_index(len, s0, s1, s2);
+        if !pattern2[i].get(s3) {
+            return false;
+        }
+
+        let s3 = memory.checkdigit5[2] as usize;
+        let i = pattern1_index(len, s0, s1, s3);
+        if !pattern1[i].get(s2) {
+            return false;
+        }
+
+        true
+    }
+
     fn next(
+        pattern1: &[BitSet256],
+        pattern2: &[BitSet256],
         append_word: &[usize],
         expected_memory: &Memory,
         memory: &Memory,
@@ -308,9 +374,58 @@ pub fn dict_search(expected_memory: &Memory) {
             return None;
         }
 
+        let len = password.len() + append_word.len();
+        if !is_valid_pattern(pattern1, pattern2, len, &memory) {
+            return None;
+        }
+
         password.extend(append_word);
 
         Some(memory)
+    }
+
+    #[allow(non_snake_case)]
+    fn next_simd3(
+        dict3: &Vec<u8x32>, // dict3[i][j]: i番目の組み合わせのj文字目
+        pattern1: &[BitSet256],
+        pattern2: &[BitSet256],
+        expected_memory: &Memory,
+        memory: &Memory,
+        password: &[usize],
+    ) -> Vec<(Memory, Vec<usize>)> {
+        let (a31F4, a31F5, a31F7, a31F8, a31F9, a31FA, a31FB) = forward_step_simd(memory, dict3);
+
+        let mut res = Vec::new();
+        for i in 0..32 {
+            if memory.bit() > expected_memory.bit() {
+                continue;
+            }
+
+            let memory = Memory {
+                checkdigit2: [a31F4.extract(i), a31F5.extract(i)],
+                password_len: memory.password_len,
+                checkdigit5: [
+                    a31F7.extract(i),
+                    a31F8.extract(i),
+                    a31F9.extract(i),
+                    a31FA.extract(i),
+                    a31FB.extract(i),
+                ],
+            };
+
+            if !is_valid_pattern(pattern1, pattern2, password.len() + 3, &memory) {
+                continue;
+            }
+
+            let mut password = password.to_vec();
+            password.extend([
+                CODE2INDEX[dict3[0].extract(i) as usize],
+                CODE2INDEX[dict3[1].extract(i) as usize],
+                CODE2INDEX[dict3[2].extract(i) as usize],
+            ]);
+            res.push((memory, password));
+        }
+        res
     }
 
     fn dfs_dict(
@@ -324,24 +439,6 @@ pub fn dict_search(expected_memory: &Memory) {
         contains_specific_char: bool,
     ) {
         let len = password.len();
-
-        {
-            let s0 = memory.checkdigit2[0] as usize;
-            let s1 = memory.checkdigit2[1] as usize;
-            let s2 = memory.checkdigit5[0] as usize;
-
-            let s3 = memory.checkdigit5[1] as usize;
-            let i = pattern2_index(len, s0, s1, s2);
-            if !pattern2[i].get(s3) {
-                return;
-            }
-
-            let s3 = memory.checkdigit5[2] as usize;
-            let i = pattern1_index(len, s0, s1, s3);
-            if !pattern1[i].get(s2) {
-                return;
-            }
-        }
 
         if OPT.verbose {
             eprintln!(
@@ -364,7 +461,14 @@ pub fn dict_search(expected_memory: &Memory) {
         if password.len() <= 1 {
             dict.words.iter().for_each(|word| {
                 let mut password = password.to_vec();
-                if let Some(memory) = next(word, expected_memory, memory, &mut password) {
+                if let Some(memory) = next(
+                    pattern1,
+                    pattern2,
+                    word,
+                    expected_memory,
+                    memory,
+                    &mut password,
+                ) {
                     eprintln!(
                         "trying... {} ({})",
                         to_string(&password),
@@ -401,10 +505,126 @@ pub fn dict_search(expected_memory: &Memory) {
         } else {
             dict.words.par_iter().for_each(|word| {
                 let mut password = password.to_vec();
-                if let Some(memory) = next(word, expected_memory, memory, &mut password) {
+                if let Some(memory) = next(
+                    pattern1,
+                    pattern2,
+                    word,
+                    expected_memory,
+                    memory,
+                    &mut password,
+                ) {
                     dfs_dict(
                         dict,
                         &mut Vec::with_capacity(0), // このルートはキャッシュしないので
+                        pattern1,
+                        pattern2,
+                        expected_memory,
+                        &memory,
+                        &password,
+                        contains_specific_char
+                            || SPECIFIC_CHARS.par_iter().any(|c| word.contains(c)),
+                    );
+                }
+            });
+        }
+    }
+
+    fn dfs_dict0(
+        dict3: &Vec<Vec<u8x32>>,
+        dict: &Dict,
+        cache: &mut Vec<String>,
+        pattern1: &[BitSet256],
+        pattern2: &[BitSet256],
+        expected_memory: &Memory,
+        memory: &Memory,
+        password: &[usize],
+        contains_specific_char: bool,
+    ) {
+        let len = password.len();
+
+        if expected_memory.len() - len < 3 {
+            return dfs_dict(
+                dict,
+                cache,
+                pattern1,
+                pattern2,
+                expected_memory,
+                memory,
+                password,
+                contains_specific_char,
+            );
+        }
+
+        if OPT.verbose {
+            eprintln!(
+                "checking: {}",
+                password
+                    .iter()
+                    .map(|&p| CODE2CHAR[CHAR_CODES[p] as usize])
+                    .collect::<String>()
+            );
+        }
+
+        if password.len() <= 1 {
+            dict.words.iter().for_each(|word| {
+                let mut password = password.to_vec();
+                if let Some(memory) = next(
+                    pattern1,
+                    pattern2,
+                    word,
+                    expected_memory,
+                    memory,
+                    &mut password,
+                ) {
+                    eprintln!(
+                        "trying... {} ({})",
+                        to_string(&password),
+                        get_current_time()
+                    );
+
+                    let password_text = {
+                        let mut password_text = String::new();
+                        password_text.push_str(&to_string(&password));
+                        password_text
+                    };
+
+                    if cache.contains(&password_text) {
+                        eprintln!("skipped");
+                        return;
+                    }
+
+                    dfs_dict0(
+                        dict3,
+                        dict,
+                        &mut Vec::with_capacity(0), // このルートはキャッシュしないので
+                        pattern1,
+                        pattern2,
+                        expected_memory,
+                        &memory,
+                        &password,
+                        contains_specific_char
+                            || SPECIFIC_CHARS.par_iter().any(|c| word.contains(c)),
+                    );
+
+                    cache.push(password_text);
+                    std::fs::write("progress.txt", cache.join("\n")).unwrap();
+                }
+            });
+        } else {
+            dict3.iter().for_each(|dict3_0| {
+                for (memory, password) in next_simd3(
+                    dict3_0,
+                    pattern1,
+                    pattern2,
+                    expected_memory,
+                    memory,
+                    password,
+                ) {
+                    let word = &password[password.len() - 3..];
+                    dfs_dict0(
+                        dict3,
+                        dict,
+                        cache,
                         pattern1,
                         pattern2,
                         expected_memory,
@@ -427,7 +647,8 @@ pub fn dict_search(expected_memory: &Memory) {
         .lines()
         .map(|s| s.to_owned())
         .collect();
-    dfs_dict(
+    dfs_dict0(
+        &dict3,
         &dict,
         &mut cache,
         &pattern1,
