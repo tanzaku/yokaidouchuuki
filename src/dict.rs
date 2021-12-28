@@ -66,7 +66,12 @@ fn get_current_time() -> String {
 pub fn dict_search(expected_memory: &Memory) {
     let dict = Dict::new();
 
-    fn build_pattern1(dict: &Dict, expected_memory: &Memory) -> Vec<Vec<Vec<Vec<BitSet256>>>> {
+    #[inline]
+    fn pattern1_index(len: usize, s0: usize, s1: usize, s3: usize) -> usize {
+        ((len * 0x100 + s0) * 0x100 + s1) * 0x40 + s3
+    }
+
+    fn build_pattern1(dict: &Dict, expected_memory: &Memory) -> Vec<BitSet256> {
         eprintln!("calc DP1 ({})", get_current_time());
 
         std::fs::create_dir_all("cache").unwrap();
@@ -86,14 +91,15 @@ pub fn dict_search(expected_memory: &Memory) {
 
         let len = expected_memory.len();
 
-        let mut dp = vec![vec![vec![vec![BitSet256::default(); 0x40]; 0x100]; 0x100]; len + 1];
+        let mut dp = vec![BitSet256::default(); 0x40 * 0x100 * 0x100 * (len + 1)];
 
         {
             let s0 = expected_memory.checkdigit2[0] as usize;
             let s1 = expected_memory.checkdigit2[1] as usize;
             let s2 = expected_memory.checkdigit5[0] as usize;
             let s3 = expected_memory.checkdigit5[2] as usize;
-            dp[len][s0][s1][s3].flip(s2);
+            let i = pattern1_index(len, s0, s1, s3);
+            dp[i].flip(s2);
         }
 
         // by dict
@@ -102,14 +108,15 @@ pub fn dict_search(expected_memory: &Memory) {
         loop {
             let mut updated = false;
 
-            let mut visited = vec![vec![[[BitSet256::default(); 0x40]; 0x100]; 0x100]; len + 1];
+            let mut visited = vec![BitSet256::default(); 0x40 * 0x100 * 0x100 * (len + 1)];
             {
                 let memory = Memory::new(expected_memory.len() as u8);
                 let s0 = memory.checkdigit2[0] as usize;
                 let s1 = memory.checkdigit2[1] as usize;
                 let s2 = memory.checkdigit5[0] as usize;
                 let s3 = memory.checkdigit5[2] as usize;
-                visited[0][s0][s1][s3].flip(s2);
+                let i = pattern1_index(0, s0, s1, s3);
+                visited[i].flip(s2);
             }
 
             for len in 0..n {
@@ -117,7 +124,8 @@ pub fn dict_search(expected_memory: &Memory) {
                 for s0 in 0..0x100 {
                     for s1 in 0..0x100 {
                         for s3 in 0..0x40 {
-                            if visited[len][s0][s1][s3].is_zero() {
+                            let i = pattern1_index(len, s0, s1, s3);
+                            if visited[i].is_zero() {
                                 continue;
                             }
 
@@ -144,14 +152,15 @@ pub fn dict_search(expected_memory: &Memory) {
                                 let next_s3 = memory.checkdigit5[2] as usize;
                                 let offset = memory.checkdigit5[0] as usize;
 
-                                let rotated = visited[len][s0][s1][s3].rot_left(offset);
-                                visited[next_len][next_s0][next_s1][next_s3] |= rotated;
+                                let i = pattern1_index(len, s0, s1, s3);
+                                let j = pattern1_index(next_len, next_s0, next_s1, next_s3);
+                                let rotated = visited[i].rot_left(offset);
+                                visited[j] |= rotated;
 
-                                let rotated =
-                                    dp[next_len][next_s0][next_s1][next_s3].rot_right(offset);
-                                let prev = dp[len][s0][s1][s3].clone();
-                                dp[len][s0][s1][s3] |= &rotated & &visited[len][s0][s1][s3];
-                                updated |= prev != dp[len][s0][s1][s3];
+                                let rotated = dp[j].rot_right(offset);
+                                let prev = dp[i].clone();
+                                dp[i] |= &rotated & &visited[i];
+                                updated |= prev != dp[i];
                             }
                         }
                     }
@@ -307,7 +316,7 @@ pub fn dict_search(expected_memory: &Memory) {
     fn dfs_dict(
         dict: &Dict,
         cache: &mut Vec<String>,
-        pattern1: &[Vec<Vec<Vec<BitSet256>>>],
+        pattern1: &[BitSet256],
         pattern2: &[BitSet256],
         expected_memory: &Memory,
         memory: &Memory,
@@ -328,7 +337,8 @@ pub fn dict_search(expected_memory: &Memory) {
             }
 
             let s3 = memory.checkdigit5[2] as usize;
-            if !pattern1[len][s0][s1][s3].get(s2) {
+            let i = pattern1_index(len, s0, s1, s3);
+            if !pattern1[i].get(s2) {
                 return;
             }
         }
