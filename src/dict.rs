@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 use chrono::Utc;
 use once_cell::sync::Lazy;
 use packed_simd_2::u8x32;
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
 use rayon::slice::ParallelSlice;
 
 use crate::bitset::BitSet256;
@@ -63,6 +63,8 @@ fn get_current_time() -> String {
     let datetime = Utc::now().with_timezone(&tz);
     datetime.to_string()
 }
+
+const SIMD_LEN: usize = 1;
 
 pub fn dict_search(expected_memory: &Memory) {
     let dict = Dict::new();
@@ -292,13 +294,13 @@ pub fn dict_search(expected_memory: &Memory) {
     let dict3 = {
         let mut dict3s = Vec::new();
         fn init_dict3(dict: &Dict, cur_word: &mut Vec<usize>, dict3s: &mut Vec<Vec<usize>>) {
-            if cur_word.len() == 3 {
+            if cur_word.len() == SIMD_LEN {
                 dict3s.push(cur_word.clone());
                 return;
             }
 
             for word in &dict.words {
-                if cur_word.len() + word.len() > 3 {
+                if cur_word.len() + word.len() > SIMD_LEN {
                     continue;
                 }
                 cur_word.extend(word);
@@ -311,7 +313,7 @@ pub fn dict_search(expected_memory: &Memory) {
         let mut dict3 = Vec::new();
         for d in dict3s.chunks(32) {
             let mut vec = Vec::new();
-            for i in 0..3 {
+            for i in 0..SIMD_LEN {
                 let v: Vec<_> = d
                     .iter()
                     .map(|w| CHAR_CODES[w[i]])
@@ -395,37 +397,38 @@ pub fn dict_search(expected_memory: &Memory) {
     ) -> Vec<(Memory, Vec<usize>)> {
         let (a31F4, a31F5, a31F7, a31F8, a31F9, a31FA, a31FB) = forward_step_simd(memory, dict3);
 
-        let mut res = Vec::new();
-        for i in 0..32 {
-            if memory.bit() > expected_memory.bit() {
-                continue;
-            }
+        (0..32)
+            .par_bridge()
+            .filter_map(move |i| {
+                let memory = Memory {
+                    checkdigit2: [a31F4.extract(i), a31F5.extract(i)],
+                    password_len: memory.password_len,
+                    checkdigit5: [
+                        a31F7.extract(i),
+                        a31F8.extract(i),
+                        a31F9.extract(i),
+                        a31FA.extract(i),
+                        a31FB.extract(i),
+                    ],
+                };
 
-            let memory = Memory {
-                checkdigit2: [a31F4.extract(i), a31F5.extract(i)],
-                password_len: memory.password_len,
-                checkdigit5: [
-                    a31F7.extract(i),
-                    a31F8.extract(i),
-                    a31F9.extract(i),
-                    a31FA.extract(i),
-                    a31FB.extract(i),
-                ],
-            };
+                if memory.bit() > expected_memory.bit() {
+                    return None;
+                }
 
-            if !is_valid_pattern(pattern1, pattern2, password.len() + 3, &memory) {
-                continue;
-            }
+                let di0 = dict3[0].extract(i);
+                if di0 == 0xFF {
+                    return None;
+                }
+                if !is_valid_pattern(pattern1, pattern2, password.len() + SIMD_LEN, &memory) {
+                    return None;
+                }
 
-            let mut password = password.to_vec();
-            password.extend([
-                CODE2INDEX[dict3[0].extract(i) as usize],
-                CODE2INDEX[dict3[1].extract(i) as usize],
-                CODE2INDEX[dict3[2].extract(i) as usize],
-            ]);
-            res.push((memory, password));
-        }
-        res
+                let mut password = password.to_vec();
+                password.extend(dict3.iter().map(|&d| CODE2INDEX[d.extract(i) as usize]));
+                Some((memory, password))
+            })
+            .collect()
     }
 
     fn dfs_dict(
@@ -542,7 +545,7 @@ pub fn dict_search(expected_memory: &Memory) {
     ) {
         let len = password.len();
 
-        if expected_memory.len() - len < 3 {
+        if expected_memory.len() - len < SIMD_LEN {
             return dfs_dict(
                 dict,
                 cache,
@@ -596,7 +599,7 @@ pub fn dict_search(expected_memory: &Memory) {
                     dfs_dict0(
                         dict3,
                         dict,
-                        &mut Vec::with_capacity(0), // このルートはキャッシュしないので
+                        cache,
                         pattern1,
                         pattern2,
                         expected_memory,
@@ -611,20 +614,22 @@ pub fn dict_search(expected_memory: &Memory) {
                 }
             });
         } else {
-            dict3.iter().for_each(|dict3_0| {
-                for (memory, password) in next_simd3(
+            dict3.par_iter().for_each(|dict3_0| {
+                next_simd3(
                     dict3_0,
                     pattern1,
                     pattern2,
                     expected_memory,
                     memory,
                     password,
-                ) {
+                )
+                .par_iter()
+                .for_each(|(memory, password)| {
                     let word = &password[password.len() - 3..];
                     dfs_dict0(
                         dict3,
                         dict,
-                        cache,
+                        &mut Vec::with_capacity(0), // このルートはキャッシュしないので
                         pattern1,
                         pattern2,
                         expected_memory,
@@ -633,7 +638,7 @@ pub fn dict_search(expected_memory: &Memory) {
                         contains_specific_char
                             || SPECIFIC_CHARS.par_iter().any(|c| word.contains(c)),
                     );
-                }
+                });
             });
         }
     }
