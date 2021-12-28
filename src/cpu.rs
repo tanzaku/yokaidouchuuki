@@ -1,4 +1,5 @@
 use once_cell::sync::Lazy;
+use packed_simd_2::{u8x32, FromBits};
 
 use crate::domain::CHAR_CODES;
 
@@ -161,6 +162,69 @@ pub fn forward_step(memory: &mut Memory, a: u8) {
     calc_checkdigit5(&mut cpu, memory);
 }
 
+#[allow(non_snake_case)]
+pub fn forward_step_simd(
+    memory: &Memory,
+    a: u8x32,
+) -> (u8x32, u8x32, u8x32, u8x32, u8x32, u8x32, u8x32) {
+    let mut a31F4 = u8x32::splat(memory.checkdigit2[0]);
+    let mut a31F5 = u8x32::splat(memory.checkdigit2[1]);
+    let mut a31F7 = u8x32::splat(memory.checkdigit5[0]);
+    let mut a31F8 = u8x32::splat(memory.checkdigit5[1]);
+    let mut a31F9 = u8x32::splat(memory.checkdigit5[2]);
+    let mut a31FA = u8x32::splat(memory.checkdigit5[3]);
+    let mut a31FB = u8x32::splat(memory.checkdigit5[4]);
+
+    {
+        let mut a = a.clone();
+
+        // コンパイラがループアンローリングしてくれることを祈るループ
+        for _ in 0..8 {
+            let c = a & 0x80;
+            a <<= 1;
+            let c1 = a31F4 << 7;
+            a31F4 = (a31F4 >> 1) | c;
+            let c = a31F5 & 0x01;
+            a31F5 = (a31F5 >> 1) | c1;
+
+            a31F4 ^= c << 7 | c << 2;
+            a31F5 ^= c << 3;
+        }
+    }
+
+    #[inline]
+    fn add(a: u8x32, b: u8x32, c: u8x32) -> (u8x32, u8x32) {
+        let sum = a + b + c;
+        let c = (a & b) | ((a | b) & !sum);
+        (sum, c & 0x80)
+    }
+
+    {
+        let c0xE5 = u8x32::splat(0xE5);
+        let c = u8x32::from_bits(a31F4.ge(c0xE5)) >> 7;
+
+        // dbg!(a, a31F7, a31F4, c);
+        // dbg!(a, a31F7, c);
+
+        let v = a + c; // ここでオーバーフローは発生し得ない
+        a31F7 += v;
+        let mut c = u8x32::from_bits(a31F7.lt(v)) >> 7;
+
+        // dbg!(a31F8, a31F5, c, a31F7, v);
+
+        (a31F8, c) = add(a31F8, a31F5, c);
+        a31F9 ^= a;
+
+        let c1 = a31FA & 0x01;
+        a31FA = (a31FA >> 1) | c;
+        (a31FA, c) = add(a31FA, a, c1);
+        // dbg!(a31FB, a.count_ones(), c);
+        a31FB += a.count_ones() + (c >> 7);
+    }
+
+    (a31F4, a31F5, a31F7, a31F8, a31F9, a31FA, a31FB)
+}
+
 pub fn forward_word(memory: &mut Memory, word: &[usize]) {
     word.iter()
         .map(|&c| CHAR_CODES[c])
@@ -227,6 +291,78 @@ fn test_calc_checkdigit1() {
                 assert_eq!(cpu1, cpu2);
                 assert_eq!(memory1, memory2);
             }
+        }
+    }
+}
+
+#[allow(non_snake_case)]
+#[test]
+fn test_calc_simd() {
+    fn validate1(memory: &Memory) {
+        let a: u8x32 = u8x32::new(
+            0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D,
+            0x0E, 0x0F, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1A, 0x1B,
+            0x1C, 0x1D, 0x1E, 0x1F,
+        );
+
+        let (a31F4, a31F5, a31F7, a31F8, a31F9, a31FA, a31FB) = forward_step_simd(&memory, a);
+
+        for i in 0..0x20 {
+            if memory.checkdigit2[1] != 1 {
+                continue;
+            }
+            let mut memory = memory.clone();
+            forward_step(&mut memory, i as u8);
+            // dbg!(a31F4, a31F5, a31F7, a31F8, a31F9, a31FA, a31FB, &memory, &memory0, i);
+            assert_eq!(a31F4.extract(i), memory.checkdigit2[0]);
+            assert_eq!(a31F5.extract(i), memory.checkdigit2[1]);
+            assert_eq!(a31F7.extract(i), memory.checkdigit5[0]);
+            assert_eq!(a31F8.extract(i), memory.checkdigit5[1]);
+            assert_eq!(a31F9.extract(i), memory.checkdigit5[2]);
+            assert_eq!(a31FA.extract(i), memory.checkdigit5[3]);
+            assert_eq!(a31FB.extract(i), memory.checkdigit5[4]);
+        }
+    }
+
+    fn validate2(memory: &Memory) {
+        let a: u8x32 = u8x32::new(
+            0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2A, 0x2B, 0x2C, 0x2D,
+            0x2E, 0x2F, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3A, 0x3B,
+            0x3C, 0x3D, 0x3E, 0x3F,
+        );
+
+        let (a31F4, a31F5, a31F7, a31F8, a31F9, a31FA, a31FB) = forward_step_simd(&memory, a);
+
+        for i in 0x20..0x40 {
+            let mut memory = memory.clone();
+            forward_step(&mut memory, i as u8);
+            assert_eq!(a31F4.extract(i - 0x20), memory.checkdigit2[0]);
+            assert_eq!(a31F5.extract(i - 0x20), memory.checkdigit2[1]);
+            assert_eq!(a31F7.extract(i - 0x20), memory.checkdigit5[0]);
+            assert_eq!(a31F8.extract(i - 0x20), memory.checkdigit5[1]);
+            assert_eq!(a31F9.extract(i - 0x20), memory.checkdigit5[2]);
+            assert_eq!(a31FA.extract(i - 0x20), memory.checkdigit5[3]);
+            assert_eq!(a31FB.extract(i - 0x20), memory.checkdigit5[4]);
+        }
+    }
+
+    for j in 0..0x100 {
+        for k in 0..0x100 {
+            let memory = Memory {
+                checkdigit2: [j as u8, k as u8],
+                password_len: 0,
+                checkdigit5: [0xFF, 0xFF, 0xFF, 0xFF, 0x40],
+            };
+            validate1(&memory);
+            validate2(&memory);
+
+            let memory = Memory {
+                checkdigit2: [j as u8, k as u8],
+                password_len: 0,
+                checkdigit5: [0x00, 0x00, 0x00, 0x00, 0x00],
+            };
+            validate1(&memory);
+            validate2(&memory);
         }
     }
 }
