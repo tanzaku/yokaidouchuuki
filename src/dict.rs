@@ -9,7 +9,9 @@ use std::sync::{Arc, Mutex};
 use chrono::Utc;
 use once_cell::sync::Lazy;
 use packed_simd_2::u8x32;
-use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
+use rayon::iter::{
+    IntoParallelIterator, IntoParallelRefIterator, ParallelBridge, ParallelIterator,
+};
 use rayon::slice::ParallelSlice;
 
 use crate::bitset::BitSet256;
@@ -398,7 +400,7 @@ pub fn dict_search(expected_memory: &Memory) {
         let (a31F4, a31F5, a31F7, a31F8, a31F9, a31FA, a31FB) = forward_step_simd(memory, dict3);
 
         (0..32)
-            .par_bridge()
+            .into_par_iter()
             .filter_map(move |i| {
                 let memory = Memory {
                     checkdigit2: [a31F4.extract(i), a31F5.extract(i)],
