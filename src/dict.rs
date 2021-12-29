@@ -520,16 +520,20 @@ pub fn dict_search(expected_memory: &Memory) {
                     .par_iter()
                     .flat_map(|w3| {
                         dict.words.par_iter().flat_map(|w4| {
-                            let mut memory = memory.clone();
-                            let append_word: Vec<_> = w3.iter().chain(w4).cloned().collect();
-                            let password: Vec<_> =
-                                password.iter().chain(&append_word).cloned().collect();
+                            dict.words.par_iter().flat_map(|w5| {
+                                let mut memory = memory.clone();
+                                let append_word: Vec<_> =
+                                    w3.iter().chain(w4.iter()).chain(w5).cloned().collect();
+                                let password: Vec<_> =
+                                    password.iter().chain(&append_word).cloned().collect();
 
-                            forward_word(&mut memory, &append_word);
-                            if !is_valid_pattern(&pattern1, &pattern2, password.len(), &memory) {
-                                return None;
-                            }
-                            Some((memory, password))
+                                forward_word(&mut memory, &append_word);
+                                if is_valid_pattern(&pattern1, &pattern2, password.len(), &memory) {
+                                    Some((memory, password))
+                                } else {
+                                    None
+                                }
+                            })
                         })
                     })
                     .for_each(|(memory, password)| {
