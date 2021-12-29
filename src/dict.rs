@@ -400,7 +400,7 @@ pub fn dict_search(expected_memory: &Memory) {
         let (a31F4, a31F5, a31F7, a31F8, a31F9, a31FA, a31FB) = forward_step_simd(memory, dict3);
 
         (0..32)
-            .into_par_iter()
+            .take_while(|&i| dict3[0].extract(i) != 0xFF)
             .filter_map(move |i| {
                 let memory = Memory {
                     checkdigit2: [a31F4.extract(i), a31F5.extract(i)],
@@ -418,10 +418,6 @@ pub fn dict_search(expected_memory: &Memory) {
                     return None;
                 }
 
-                let di0 = dict3[0].extract(i);
-                if di0 == 0xFF {
-                    return None;
-                }
                 if !is_valid_pattern(pattern1, pattern2, password.len() + SIMD_LEN, &memory) {
                     return None;
                 }
@@ -433,236 +429,127 @@ pub fn dict_search(expected_memory: &Memory) {
             .collect()
     }
 
+    fn contains_specific_char(word: &[usize]) -> bool {
+        SPECIFIC_CHARS.par_iter().any(|c| word.contains(c))
+    }
+
     fn dfs_dict(
+        dict3: &Vec<Vec<u8x32>>,
         dict: &Dict,
-        cache: &mut Vec<String>,
         pattern1: &[BitSet256],
         pattern2: &[BitSet256],
         expected_memory: &Memory,
         memory: &Memory,
         password: &[usize],
-        contains_specific_char: bool,
     ) {
         let len = password.len();
 
         if OPT.verbose {
-            eprintln!(
-                "checking: {}",
-                password
-                    .iter()
-                    .map(|&p| CODE2CHAR[CHAR_CODES[p] as usize])
-                    .collect::<String>()
-            );
+            eprintln!("checking: {}", to_string(password));
         }
 
         if len == expected_memory.len() {
-            if contains_specific_char && memory == expected_memory {
+            if memory == expected_memory && contains_specific_char(password) {
                 println!("{}", to_string(password));
             }
 
             return;
         }
 
-        if password.len() <= 1 {
-            dict.words.iter().for_each(|word| {
-                let mut password = password.to_vec();
-                if let Some(memory) = next(
-                    pattern1,
-                    pattern2,
-                    word,
-                    expected_memory,
-                    memory,
-                    &mut password,
-                ) {
-                    eprintln!(
-                        "trying... {} ({})",
-                        to_string(&password),
-                        get_current_time()
-                    );
-
-                    let password_text = {
-                        let mut password_text = String::new();
-                        password_text.push_str(&to_string(&password));
-                        password_text
-                    };
-
-                    if cache.contains(&password_text) {
-                        eprintln!("skipped");
-                        return;
-                    }
-
-                    dfs_dict(
-                        dict,
-                        cache,
-                        pattern1,
-                        pattern2,
-                        expected_memory,
-                        &memory,
-                        &password,
-                        contains_specific_char
-                            || SPECIFIC_CHARS.par_iter().any(|c| word.contains(c)),
-                    );
-
-                    cache.push(password_text);
-                    std::fs::write("progress.txt", cache.join("\n")).unwrap();
-                }
-            });
-        } else {
-            dict.words.par_iter().for_each(|word| {
-                let mut password = password.to_vec();
-                if let Some(memory) = next(
-                    pattern1,
-                    pattern2,
-                    word,
-                    expected_memory,
-                    memory,
-                    &mut password,
-                ) {
-                    dfs_dict(
-                        dict,
-                        &mut Vec::with_capacity(0), // このルートはキャッシュしないので
-                        pattern1,
-                        pattern2,
-                        expected_memory,
-                        &memory,
-                        &password,
-                        contains_specific_char
-                            || SPECIFIC_CHARS.par_iter().any(|c| word.contains(c)),
-                    );
-                }
-            });
-        }
-    }
-
-    fn dfs_dict0(
-        dict3: &Vec<Vec<u8x32>>,
-        dict: &Dict,
-        cache: &mut Vec<String>,
-        pattern1: &[BitSet256],
-        pattern2: &[BitSet256],
-        expected_memory: &Memory,
-        memory: &Memory,
-        password: &[usize],
-        contains_specific_char: bool,
-    ) {
-        let len = password.len();
-
-        if expected_memory.len() - len < SIMD_LEN {
-            return dfs_dict(
-                dict,
-                cache,
+        dict3.iter().for_each(|dict3_0| {
+            next_simd3(
+                dict3_0,
                 pattern1,
                 pattern2,
                 expected_memory,
                 memory,
                 password,
-                contains_specific_char,
-            );
-        }
-
-        if OPT.verbose {
-            eprintln!(
-                "checking: {}",
-                password
-                    .iter()
-                    .map(|&p| CODE2CHAR[CHAR_CODES[p] as usize])
-                    .collect::<String>()
-            );
-        }
-
-        if password.len() <= 1 {
-            dict.words.iter().for_each(|word| {
-                let mut password = password.to_vec();
-                if let Some(memory) = next(
-                    pattern1,
-                    pattern2,
-                    word,
-                    expected_memory,
-                    memory,
-                    &mut password,
-                ) {
-                    eprintln!(
-                        "trying... {} ({})",
-                        to_string(&password),
-                        get_current_time()
-                    );
-
-                    let password_text = {
-                        let mut password_text = String::new();
-                        password_text.push_str(&to_string(&password));
-                        password_text
-                    };
-
-                    if cache.contains(&password_text) {
-                        eprintln!("skipped");
-                        return;
-                    }
-
-                    dfs_dict0(
-                        dict3,
-                        dict,
-                        cache,
-                        pattern1,
-                        pattern2,
-                        expected_memory,
-                        &memory,
-                        &password,
-                        contains_specific_char
-                            || SPECIFIC_CHARS.par_iter().any(|c| word.contains(c)),
-                    );
-
-                    cache.push(password_text);
-                    std::fs::write("progress.txt", cache.join("\n")).unwrap();
-                }
-            });
-        } else {
-            dict3.par_iter().for_each(|dict3_0| {
-                next_simd3(
-                    dict3_0,
+            )
+            .iter()
+            .for_each(|(memory, password)| {
+                dfs_dict(
+                    dict3,
+                    dict,
                     pattern1,
                     pattern2,
                     expected_memory,
-                    memory,
-                    password,
-                )
-                .par_iter()
-                .for_each(|(memory, password)| {
-                    let word = &password[password.len() - 3..];
-                    dfs_dict0(
-                        dict3,
-                        dict,
-                        &mut Vec::with_capacity(0), // このルートはキャッシュしないので
-                        pattern1,
-                        pattern2,
-                        expected_memory,
-                        &memory,
-                        &password,
-                        contains_specific_char
-                            || SPECIFIC_CHARS.par_iter().any(|c| word.contains(c)),
-                    );
-                });
+                    &memory,
+                    &password,
+                );
             });
-        }
+        });
+
+        // TODO nmcの探索
     }
 
     eprintln!("start search");
 
-    let memory = Memory::new(expected_memory.len() as u8);
-    let password = Vec::new();
     let mut cache: Vec<_> = std::fs::read_to_string("progress.txt")
         .unwrap_or_default()
         .lines()
         .map(|s| s.to_owned())
         .collect();
-    dfs_dict0(
-        &dict3,
-        &dict,
-        &mut cache,
-        &pattern1,
-        &pattern2,
-        expected_memory,
-        &memory,
-        &password,
-        false,
-    );
+
+    for w1 in &dict.words {
+        let password_text = to_string(w1);
+
+        eprintln!("trying... {} ({})", &password_text, get_current_time());
+
+        if cache.contains(&password_text) {
+            eprintln!("skipped");
+            continue;
+        }
+
+        for w2 in &dict.words {
+            let password: Vec<_> = w1.iter().chain(w2).cloned().collect();
+            let password_text = to_string(&password);
+
+            eprintln!("trying... {} ({})", &password_text, get_current_time());
+
+            if cache.contains(&password_text) {
+                eprintln!("skipped");
+                continue;
+            }
+
+            let len = w1.len() + w2.len();
+            let mut memory = Memory::new(expected_memory.len() as u8);
+            forward_word(&mut memory, &password);
+
+            if is_valid_pattern(&pattern1, &pattern2, len, &memory) {
+                dict.words
+                    .par_iter()
+                    .flat_map(|w3| {
+                        dict.words.par_iter().flat_map(|w4| {
+                            let mut memory = memory.clone();
+                            let append_word: Vec<_> = w3.iter().chain(w4).cloned().collect();
+                            let password: Vec<_> =
+                                password.iter().chain(&append_word).cloned().collect();
+
+                            forward_word(&mut memory, &append_word);
+                            if !is_valid_pattern(&pattern1, &pattern2, password.len(), &memory) {
+                                return None;
+                            }
+                            Some((memory, password))
+                        })
+                    })
+                    .for_each(|(memory, password)| {
+                        dfs_dict(
+                            &dict3,
+                            &dict,
+                            &pattern1,
+                            &pattern2,
+                            expected_memory,
+                            &memory,
+                            &password,
+                        );
+                    });
+            }
+
+            cache.push(password_text);
+            std::fs::write("progress.txt", cache.join("\n")).unwrap();
+        }
+
+        cache.push(password_text);
+        std::fs::write("progress.txt", cache.join("\n")).unwrap();
+    }
 }
