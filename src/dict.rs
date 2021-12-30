@@ -441,6 +441,7 @@ pub fn dict_search(expected_memory: &Memory) {
         expected_memory: &Memory,
         memory: &Memory,
         password: &[usize],
+        found_passwords: &mut Vec<String>,
     ) {
         let len = password.len();
 
@@ -450,7 +451,8 @@ pub fn dict_search(expected_memory: &Memory) {
 
         if len == expected_memory.len() {
             if memory == expected_memory && contains_specific_char(password) {
-                println!("{}", to_string(password));
+                // println!("{}", to_string(password));
+                found_passwords.push(to_string(password));
             }
 
             return;
@@ -475,6 +477,7 @@ pub fn dict_search(expected_memory: &Memory) {
                     expected_memory,
                     &memory,
                     &password,
+                    found_passwords,
                 );
             });
         });
@@ -516,7 +519,8 @@ pub fn dict_search(expected_memory: &Memory) {
             forward_word(&mut memory, &password);
 
             if is_valid_pattern(&pattern1, &pattern2, len, &memory) {
-                dict.words
+                let passwords: Vec<_> = dict
+                    .words
                     .par_iter()
                     .flat_map(|w3| {
                         dict.words.par_iter().flat_map(|w4| {
@@ -536,7 +540,8 @@ pub fn dict_search(expected_memory: &Memory) {
                             })
                         })
                     })
-                    .for_each(|(memory, password)| {
+                    .flat_map(|(memory, password)| {
+                        let mut found_passwords = Vec::new();
                         dfs_dict(
                             &dict3,
                             &dict,
@@ -545,8 +550,13 @@ pub fn dict_search(expected_memory: &Memory) {
                             expected_memory,
                             &memory,
                             &password,
+                            &mut found_passwords,
                         );
-                    });
+                        found_passwords
+                    })
+                    .collect();
+
+                println!("{}", passwords.join("\n"));
             }
 
             cache.push(password_text);
