@@ -71,6 +71,11 @@ const SIMD_LEN: usize = 1;
 pub fn dict_search(expected_memory: &Memory) {
     let dict = Dict::new();
 
+    // nmcチェック
+    if dict.words.last().unwrap().len() != 3 {
+        panic!();
+    }
+
     #[inline]
     fn pattern1_index(len: usize, s0: usize, s1: usize, s3: usize) -> usize {
         ((len * 0x100 + s0) * 0x100 + s1) * 0x40 + s3
@@ -94,26 +99,26 @@ pub fn dict_search(expected_memory: &Memory) {
             }
         }
 
-        let len = expected_memory.len();
+        let max_len = expected_memory.len();
 
-        let mut dp = vec![BitSet256::default(); 0x40 * 0x100 * 0x100 * (len + 1)];
+        let mut dp = vec![BitSet256::default(); 0x40 * 0x100 * 0x100 * (max_len + 1)];
 
         {
             let s0 = expected_memory.checkdigit2[0] as usize;
             let s1 = expected_memory.checkdigit2[1] as usize;
             let s2 = expected_memory.checkdigit5[0] as usize;
             let s3 = expected_memory.checkdigit5[2] as usize;
-            let i = pattern1_index(len, s0, s1, s3);
+            let i = pattern1_index(max_len, s0, s1, s3);
             dp[i].flip(s2);
         }
 
         // by dict
         // グラフを作って最外ループを無くしたいが、自分の環境だとメモリが足りないため断念
-        let mut n = len;
+        let mut n = max_len;
         loop {
             let mut updated = false;
 
-            let mut visited = vec![BitSet256::default(); 0x40 * 0x100 * 0x100 * (len + 1)];
+            let mut visited = vec![BitSet256::default(); 0x40 * 0x100 * 0x100 * (max_len + 1)];
             {
                 let memory = Memory::new(expected_memory.len() as u8);
                 let s0 = memory.checkdigit2[0] as usize;
@@ -135,7 +140,7 @@ pub fn dict_search(expected_memory: &Memory) {
                             }
 
                             for word in &dict.words {
-                                if len + word.len() >= visited.len() {
+                                if len + word.len() > max_len {
                                     continue;
                                 }
 
@@ -204,25 +209,25 @@ pub fn dict_search(expected_memory: &Memory) {
             }
         }
 
-        let len = expected_memory.len();
+        let max_len = expected_memory.len();
 
-        let mut dp = vec![BitSet256::default(); 0x100 * 0x100 * 0x100 * (len + 1)];
+        let mut dp = vec![BitSet256::default(); 0x100 * 0x100 * 0x100 * (max_len + 1)];
 
         {
             let s0 = expected_memory.checkdigit2[0] as usize;
             let s1 = expected_memory.checkdigit2[1] as usize;
             let s2 = expected_memory.checkdigit5[0] as usize;
             let s3 = expected_memory.checkdigit5[1] as usize;
-            dp[pattern2_index(len, s0, s1, s2)].flip(s3);
+            dp[pattern2_index(max_len, s0, s1, s2)].flip(s3);
         }
 
         // by dict
         // グラフを作って最外ループを無くしたいが、自分の環境だとメモリが足りないため断念
-        let mut n = len;
+        let mut n = max_len;
         loop {
             let mut updated = false;
 
-            let mut visited = vec![BitSet256::default(); 0x100 * 0x100 * 0x100 * (len + 1)];
+            let mut visited = vec![BitSet256::default(); 0x100 * 0x100 * 0x100 * (max_len + 1)];
 
             {
                 let memory = Memory::new(expected_memory.len() as u8);
@@ -244,7 +249,7 @@ pub fn dict_search(expected_memory: &Memory) {
                             }
 
                             for word in &dict.words {
-                                if len + word.len() >= visited.len() {
+                                if len + word.len() > max_len {
                                     continue;
                                 }
 
@@ -429,9 +434,9 @@ pub fn dict_search(expected_memory: &Memory) {
             .collect()
     }
 
-    fn contains_specific_char(word: &[usize]) -> bool {
-        SPECIFIC_CHARS.par_iter().any(|c| word.contains(c))
-    }
+    // fn contains_specific_char(word: &[usize]) -> bool {
+    //     SPECIFIC_CHARS.par_iter().any(|c| word.contains(c))
+    // }
 
     fn dfs_dict(
         dict3: &Vec<Vec<u8x32>>,
@@ -442,6 +447,7 @@ pub fn dict_search(expected_memory: &Memory) {
         memory: &Memory,
         password: &[usize],
         found_passwords: &mut Vec<String>,
+        include_nmc: bool,
     ) {
         let len = password.len();
 
@@ -449,8 +455,13 @@ pub fn dict_search(expected_memory: &Memory) {
             eprintln!("checking: {}", to_string(password));
         }
 
+        // nmc
+        if len + 3 > expected_memory.len() && !include_nmc {
+            return;
+        }
+
         if len == expected_memory.len() {
-            if memory == expected_memory && contains_specific_char(password) {
+            if include_nmc && memory == expected_memory {
                 // println!("{}", to_string(password));
                 found_passwords.push(to_string(password));
             }
@@ -478,11 +489,34 @@ pub fn dict_search(expected_memory: &Memory) {
                     &memory,
                     &password,
                     found_passwords,
+                    include_nmc,
                 );
             });
         });
 
-        // TODO nmcの探索
+        // nmcの探索
+        let nmc = dict.words.last().unwrap();
+        let mut password = password.to_vec();
+        if let Some(memory) = next(
+            pattern1,
+            pattern2,
+            nmc,
+            expected_memory,
+            memory,
+            &mut password,
+        ) {
+            dfs_dict(
+                dict3,
+                dict,
+                pattern1,
+                pattern2,
+                expected_memory,
+                &memory,
+                &password,
+                found_passwords,
+                true,
+            );
+        }
     }
 
     eprintln!("start search");
@@ -528,8 +562,13 @@ pub fn dict_search(expected_memory: &Memory) {
                                 let mut memory = memory.clone();
                                 let append_word: Vec<_> =
                                     w3.iter().chain(w4.iter()).chain(w5).cloned().collect();
+
                                 let password: Vec<_> =
                                     password.iter().chain(&append_word).cloned().collect();
+
+                                if password.len() > expected_memory.len() {
+                                    return None;
+                                }
 
                                 forward_word(&mut memory, &append_word);
                                 if is_valid_pattern(&pattern1, &pattern2, password.len(), &memory) {
@@ -551,6 +590,7 @@ pub fn dict_search(expected_memory: &Memory) {
                             &memory,
                             &password,
                             &mut found_passwords,
+                            to_string(&password).contains('n'),
                         );
                         found_passwords
                     })
