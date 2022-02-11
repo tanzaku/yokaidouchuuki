@@ -4,6 +4,6 @@
 *.bin
 *.sh
 
-passwords/
+passwords.7z
 misc/
 skk/

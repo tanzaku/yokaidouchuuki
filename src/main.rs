@@ -1,18 +1,17 @@
-use dict::dict_search;
-use domain::{EXPECTED_MEMORY_11, EXPECTED_MEMORY_14};
-use skk::skk_dict_search;
+use config::SEARCH_TARGET;
+use enumeration::enumeration;
 
+mod backward;
 mod bitset;
+mod config;
 mod cpu;
-mod dict;
 mod domain;
-mod opt;
-mod pruning;
-mod skk;
+mod enumeration;
+mod forward1;
+mod forward2;
+mod target;
+mod time;
 
 fn main() {
-    // dict_search(&EXPECTED_MEMORY_8);
-    // dict_search(&EXPECTED_MEMORY_11);
-    dict_search(&EXPECTED_MEMORY_14);
-    // skk_dict_search();
+    enumeration(SEARCH_TARGET);
 }

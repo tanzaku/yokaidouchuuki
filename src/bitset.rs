@@ -7,6 +7,10 @@ pub struct BitSet256 {
 }
 
 impl BitSet256 {
+    pub fn set(&mut self, i: usize) {
+        self.bit[i / 64] |= 1 << (i % 64);
+    }
+
     pub fn flip(&mut self, i: usize) {
         self.bit[i / 64] ^= 1 << (i % 64);
     }
@@ -16,13 +20,13 @@ impl BitSet256 {
     }
 
     pub fn rot_left(&self, i: usize) -> Self {
-        let mut b = self.clone();
+        let mut b = *self;
         b.mut_rot_left(i);
         b
     }
 
     pub fn rot_right(&self, i: usize) -> Self {
-        let mut b = self.clone();
+        let mut b = *self;
         b.mut_rot_right(i);
         b
     }
@@ -64,7 +68,7 @@ impl BitSet256 {
     }
 
     #[allow(clippy::needless_range_loop)]
-    pub fn to_vec(&self) -> Vec<bool> {
+    pub fn to_vec(self) -> Vec<bool> {
         let mut val = vec![false; 256];
         for i in 0..256 {
             val[i] = self.get(i);
@@ -74,6 +78,10 @@ impl BitSet256 {
 
     pub fn is_zero(&self) -> bool {
         self.bit == [0, 0, 0, 0]
+    }
+
+    pub fn clear(&mut self) {
+        self.bit.iter_mut().for_each(|x| *x = 0);
     }
 }
 
@@ -98,6 +106,15 @@ impl std::ops::BitAnd for &BitSet256 {
                 self.bit[3] & rhs.bit[3],
             ],
         }
+    }
+}
+
+impl std::ops::BitAndAssign for BitSet256 {
+    fn bitand_assign(&mut self, rhs: Self) {
+        self.bit
+            .iter_mut()
+            .zip(rhs.bit.iter())
+            .for_each(|(lhs, rhs)| *lhs &= *rhs);
     }
 }
 
