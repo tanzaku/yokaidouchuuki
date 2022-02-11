@@ -25,7 +25,7 @@ struct EnumerationContext {
     // 探索対象の情報
     target: Target,
 
-    // AVX512で次のパスワード
+    // 次の状態を展開するために使用する値
     a: u8x64,
 }
 
