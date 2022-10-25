@@ -70,7 +70,7 @@ pub const TARGET_HENTAIOSUGI: Target = Target {
         fb: 0x15,
     },
 
-    len: 0x08,
+    len: 0x0B,
 };
 
 // 14文字
